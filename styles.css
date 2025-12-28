@@ -1,0 +1,41 @@
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Full-screen black background */
+body {
+  height: 100vh;
+  background: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Loader container */
+.loader h1 {
+  color: #ffffff;
+  font-size: 3rem;
+  letter-spacing: 0.3em;
+  font-weight: 500;
+  opacity: 0;
+  animation: reveal 2.5s ease forwards;
+}
+
+/* Animation */
+@keyframes reveal {
+  0% {
+    opacity: 0;
+    letter-spacing: 0.6em;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    letter-spacing: 0.3em;
+  }
+}
