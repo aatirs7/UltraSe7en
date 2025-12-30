@@ -134,6 +134,7 @@ body{
   letter-spacing: 0.45em;
   text-transform: uppercase;
   text-decoration: none;
+  text-shadow: 0 0 12px rgba(255,255,255,0.12);
 
   color: rgba(255,255,255,0.82);
   border: none;
