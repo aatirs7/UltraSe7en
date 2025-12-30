@@ -125,6 +125,60 @@ body{
     0 0 60px rgba(167,112,255,0.10),
     0 0 18px rgba(255,255,255,0.06);
 }
+/* ---------- ENTER BUTTON ---------- */
+.enter-btn{
+  margin-top: 42px;
+  padding: 14px 64px;
+
+  font-size: 13px;
+  letter-spacing: 0.45em;
+  text-transform: uppercase;
+  text-decoration: none;
+
+  color: rgba(255,255,255,0.82);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 999px;
+
+  background: transparent;
+  backdrop-filter: blur(2px);
+
+  opacity: 0;
+  transform: translateY(10px);
+  animation: enterIn 1.1s ease forwards;
+  animation-delay: 1.9s;
+
+  transition:
+    color 300ms ease,
+    border-color 300ms ease,
+    box-shadow 300ms ease,
+    transform 300ms ease;
+}
+
+/* Hover = subtle glow, not aggressive */
+.enter-btn:hover{
+  color: rgba(255,255,255,0.95);
+  border-color: rgba(185,150,255,0.55);
+
+  box-shadow:
+    0 0 0 1px rgba(185,150,255,0.25),
+    0 0 22px rgba(167,112,255,0.28),
+    0 0 60px rgba(167,112,255,0.14);
+
+  transform: translateY(0) scale(1.02);
+}
+
+/* Press feedback */
+.enter-btn:active{
+  transform: scale(0.98);
+}
+
+/* ---------- ENTER ANIMATION ---------- */
+@keyframes enterIn{
+  to{
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
 /* Micro subtext */
 .micro{
