@@ -127,7 +127,7 @@ body{
 }
 /* ---------- ENTER BUTTON ---------- */
 .enter-btn{
-  margin-top: 42px;
+  margin-top: 88px;
   padding: 14px 64px;
 
   font-size: 13px;
@@ -136,7 +136,7 @@ body{
   text-decoration: none;
 
   color: rgba(255,255,255,0.82);
-  border: 1px solid rgba(255,255,255,0.35);
+  border: none;
   border-radius: 999px;
 
   background: transparent;
@@ -154,18 +154,17 @@ body{
     transform 300ms ease;
 }
 
-/* Hover = subtle glow, not aggressive */
 .enter-btn:hover{
   color: rgba(255,255,255,0.95);
-  border-color: rgba(185,150,255,0.55);
 
   box-shadow:
-    0 0 0 1px rgba(185,150,255,0.25),
-    0 0 22px rgba(167,112,255,0.28),
-    0 0 60px rgba(167,112,255,0.14);
+    0 0 0 1px rgba(185,150,255,0.18),
+    0 0 28px rgba(167,112,255,0.30),
+    0 0 80px rgba(167,112,255,0.16);
 
-  transform: translateY(0) scale(1.02);
+  transform: translateY(0) scale(1.03);
 }
+
 
 /* Press feedback */
 .enter-btn:active{
