@@ -68,7 +68,11 @@ body{
 
 /* ---------- Title ---------- */
 .title-wrap{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
+  gap: 12px;
   padding: 24px 28px;
 }
 
@@ -127,7 +131,8 @@ body{
 }
 /* ---------- ENTER BUTTON ---------- */
 .enter-btn{
-  margin-top: -170px;
+  display: inline-block;
+  margin-top: 0;
   padding: 14px 64px;
 
   font-size: 13px;
@@ -174,9 +179,13 @@ body{
 
 /* ---------- ENTER ANIMATION ---------- */
 @keyframes enterIn{
+  from{
+    opacity: 0;
+    transform: translateY(10px);
+  }
   to{
     opacity: 1;
-    transform: translateY(10);
+    transform: translateY(0);
   }
 }
 
