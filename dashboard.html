@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UltraSe7en — Dashboard</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#050607;
+      --panel: rgba(255,255,255,0.05);
+      --panel2: rgba(255,255,255,0.03);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.55);
+      --line: rgba(255,255,255,0.10);
+      --violet: rgba(167,112,255,0.30);
+      --violet2: rgba(185,150,255,0.85);
+    }
+
+    *{ box-sizing:border-box; margin:0; padding:0; }
+    html, body{ height:100%; }
+    body{
+      background:
+        radial-gradient(1100px 700px at 50% 20%, rgba(167,112,255,0.07), rgba(0,0,0,0) 65%),
+        radial-gradient(1200px 900px at 50% 50%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.85) 100%),
+        linear-gradient(180deg, #050607 0%, #020304 100%);
+      font-family: "Space Grotesk", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+    }
+
+    .wrap{
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 42px 22px 80px;
+    }
+
+    .top{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:16px;
+      margin-bottom: 18px;
+    }
+
+    .title{
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      font-weight: 400;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .date{
+      font-size: 12px;
+      letter-spacing: 0.25em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    @media (max-width: 920px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .panel{
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--panel), var(--panel2));
+      border-radius: 18px;
+      padding: 18px;
+      min-height: 220px;
+    }
+
+    .panel h2{
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.70);
+      margin-bottom: 14px;
+    }
+
+    textarea{
+      width:100%;
+      min-height: 120px;
+      resize: vertical;
+      background: rgba(0,0,0,0.20);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      color: var(--text);
+      outline:none;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    textarea:focus{
+      border-color: rgba(185,150,255,0.35);
+      box-shadow: 0 0 0 1px rgba(185,150,255,0.12), 0 0 40px rgba(167,112,255,0.10);
+    }
+
+    .row{
+      display:flex;
+      gap: 10px;
+      margin-top: 12px;
+      align-items:center;
+      justify-content:space-between;
+    }
+
+    .btn{
+      border: none;
+      background: transparent;
+      color: rgba(255,255,255,0.82);
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      font-size: 12px;
+      padding: 10px 18px;
+      border-radius: 999px;
+      cursor:pointer;
+      transition: box-shadow 250ms ease, color 250ms ease, transform 250ms ease;
+    }
+    .btn:hover{
+      color: rgba(255,255,255,0.95);
+      box-shadow:
+        0 0 0 1px rgba(185,150,255,0.18),
+        0 0 28px rgba(167,112,255,0.26),
+        0 0 80px rgba(167,112,255,0.14);
+      transform: translateY(-1px);
+    }
+    .btn:disabled{
+      opacity:0.4;
+      cursor:not-allowed;
+      box-shadow:none;
+      transform:none;
+    }
+
+    .hint{
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+      max-width: 520px;
+    }
+
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+    }
+
+    .card{
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.18);
+      border-radius: 14px;
+      padding: 12px 12px;
+    }
+
+    .card-top{
+      display:flex;
+      justify-content:space-between;
+      gap: 10px;
+      align-items:flex-start;
+      margin-bottom: 8px;
+    }
+
+    .summary{
+      font-size: 13px;
+      color: rgba(255,255,255,0.88);
+    }
+
+    .meta{
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .items{
+      margin-top: 8px;
+      display:flex;
+      flex-direction:column;
+      gap: 6px;
+      color: rgba(255,255,255,0.72);
+      font-size: 13px;
+    }
+
+    .pill{
+      display:inline-block;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(185,150,255,0.22);
+      color: rgba(185,150,255,0.85);
+      margin-right: 8px;
+    }
+
+    .card-actions{
+      display:flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mini{
+      font-size: 11px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: rgba(255,255,255,0.74);
+      cursor:pointer;
+    }
+    .mini:hover{
+      border-color: rgba(185,150,255,0.35);
+      box-shadow: 0 0 0 1px rgba(185,150,255,0.10), 0 0 30px rgba(167,112,255,0.10);
+    }
+
+    .editor{
+      margin-top: 10px;
+      display:none;
+      gap: 10px;
+    }
+    .editor textarea{
+      min-height: 90px;
+    }
+    .editor.show{
+      display:grid;
+    }
+
+    .error{
+      margin-top: 10px;
+      color: rgba(255,130,130,0.95);
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title">UltraSe7en — Dashboard</div>
+      <div class="date" id="todayLabel"></div>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Command</h2>
+        <textarea id="cmd" placeholder="Type what you did. Example: 
+Today I worked on IOC enrichment for 90 minutes, did treadmill, and noted DNS issues in containers. Add it to today."></textarea>
+        <div class="row">
+          <div class="hint">
+            Auto-add is enabled. You can edit entries after if the parse is wrong.
+          </div>
+          <button class="btn" id="submitBtn">Submit</button>
+        </div>
+        <div class="error" id="errorBox" style="display:none;"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Today</h2>
+        <div class="list" id="todayList"></div>
+      </section>
+    </div>
+  </div>
+
+<script>
+  const STORAGE_KEY = "ultrase7en.dailyLog.v0";
+
+  function isoTodayLocal() {
+    const d = new Date();
+    // local YYYY-MM-DD
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function loadAll() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function saveAll(rows) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+  }
+
+  function uid() {
+    return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
+  }
+
+  function fmtTime(ts) {
+    const d = new Date(ts);
+    // 12-hour format
+    let h = d.getHours();
+    const m = String(d.getMinutes()).padStart(2,"0");
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12; if (h === 0) h = 12;
+    return `${h}:${m} ${ampm}`;
+  }
+
+  function renderToday() {
+    const today = isoTodayLocal();
+    document.getElementById("todayLabel").textContent = today;
+
+    const all = loadAll();
+    const todays = all.filter(x => x.date === today).sort((a,b) => b.createdAt - a.createdAt);
+
+    const list = document.getElementById("todayList");
+    list.innerHTML = "";
+
+    if (todays.length === 0) {
+      list.innerHTML = `<div style="color: rgba(255,255,255,0.45); font-size: 13px;">No entries yet.</div>`;
+      return;
+    }
+
+    for (const entry of todays) {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const summary = entry.parsed?.summary || "Entry";
+      const items = entry.parsed?.items || [];
+
+      card.innerHTML = `
+        <div class="card-top">
+          <div class="summary">${escapeHtml(summary)}</div>
+          <div class="meta">${fmtTime(entry.createdAt)}</div>
+        </div>
+
+        <div class="items">
+          ${items.map(it => `<div>${renderItem(it)}</div>`).join("")}
+        </div>
+
+        <div class="card-actions">
+          <button class="mini" data-action="edit" data-id="${entry.id}">Edit</button>
+          <button class="mini" data-action="delete" data-id="${entry.id}">Delete</button>
+        </div>
+
+        <div class="editor" id="editor-${entry.id}">
+          <textarea id="editraw-${entry.id}">${escapeHtml(entry.rawText)}</textarea>
+          <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button class="mini" data-action="cancel" data-id="${entry.id}">Cancel</button>
+            <button class="mini" data-action="reparse" data-id="${entry.id}">Re-Parse</button>
+            <button class="mini" data-action="saveRaw" data-id="${entry.id}">Save Text Only</button>
+          </div>
+          <div class="hint" style="margin-top:6px;">
+            “Re-Parse” will re-run AI on the edited text and overwrite the structured items.
+            “Save Text Only” keeps your edit but leaves the old parse.
+          </div>
+        </div>
+      `;
+
+      list.appendChild(card);
+    }
+  }
+
+  function renderItem(it){
+    const t = (it?.type || "note").toLowerCase();
+    const pill = `<span class="pill">${escapeHtml(t)}</span>`;
+
+    if (t === "project") {
+      const name = it.name ? `<strong>${escapeHtml(it.name)}</strong>` : "Project";
+      const mins = (it.minutes && Number(it.minutes) > 0) ? ` — ${Number(it.minutes)} min` : "";
+      const detail = it.detail ? ` — ${escapeHtml(it.detail)}` : "";
+      return `${pill}${name}${mins}${detail}`;
+    }
+    if (t === "habit") {
+      const name = it.name ? `<strong>${escapeHtml(it.name)}</strong>` : "Habit";
+      const count = (it.count != null) ? ` — +${escapeHtml(String(it.count))}` : "";
+      return `${pill}${name}${count}`;
+    }
+    if (t === "goal") {
+      const name = it.name ? `<strong>${escapeHtml(it.name)}</strong>` : "Goal";
+      const delta = it.delta ? ` — ${escapeHtml(it.delta)}` : "";
+      return `${pill}${name}${delta}`;
+    }
+    if (t === "task") {
+      const detail = it.detail ? escapeHtml(it.detail) : "Task";
+      return `${pill}${detail}`;
+    }
+    // note default
+    return `${pill}${escapeHtml(it.detail || "Note")}`;
+  }
+
+  function escapeHtml(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  async function callParse(text){
+    const res = await fetch("/.netlify/functions/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, dateISO: isoTodayLocal() })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error ? `${data.error}\n${data.details || ""}` : "Parse failed");
+    return data;
+  }
+
+  function setError(msg){
+    const box = document.getElementById("errorBox");
+    if (!msg) { box.style.display = "none"; box.textContent = ""; return; }
+    box.style.display = "block";
+    box.textContent = msg;
+  }
+
+  document.getElementById("submitBtn").addEventListener("click", async () => {
+    setError("");
+    const btn = document.getElementById("submitBtn");
+    const input = document.getElementById("cmd");
+    const text = input.value.trim();
+    if (!text) return;
+
+    btn.disabled = true;
+    try {
+      const parsed = await callParse(text);
+
+      const entry = {
+        id: uid(),
+        date: parsed.date || isoTodayLocal(),
+        createdAt: Date.now(),
+        rawText: text,
+        parsed
+      };
+
+      const all = loadAll();
+      all.push(entry);
+      saveAll(all);
+
+      input.value = "";
+      renderToday();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+    const id = btn.dataset.id;
+    if (!action || !id) return;
+
+    const all = loadAll();
+    const idx = all.findIndex(x => x.id === id);
+    if (idx === -1) return;
+
+    if (action === "delete") {
+      all.splice(idx, 1);
+      saveAll(all);
+      renderToday();
+      return;
+    }
+
+    const editor = document.getElementById(`editor-${id}`);
+
+    if (action === "edit") {
+      editor.classList.add("show");
+      return;
+    }
+
+    if (action === "cancel") {
+      editor.classList.remove("show");
+      return;
+    }
+
+    if (action === "saveRaw") {
+      const t = document.getElementById(`editraw-${id}`).value.trim();
+      all[idx].rawText = t;
+      saveAll(all);
+      editor.classList.remove("show");
+      renderToday();
+      return;
+    }
+
+    if (action === "reparse") {
+      setError("");
+      const t = document.getElementById(`editraw-${id}`).value.trim();
+      btn.disabled = true;
+      try {
+        const parsed = await callParse(t);
+        all[idx].rawText = t;
+        all[idx].parsed = parsed;
+        saveAll(all);
+        editor.classList.remove("show");
+        renderToday();
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+  });
+
+  renderToday();
+</script>
+</body>
+</html>
