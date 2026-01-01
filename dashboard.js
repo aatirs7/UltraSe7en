@@ -1,740 +1,876 @@
-/* UltraSe7en v0 — Local-only
-   - category: text required
-   - NC: New Category Name adds category
-   - Today entries saved per date
-   - Add to Web promotes entries to Web nodes
-   - Auto-promote happens when date changes and you open the dashboard next time
-*/
+/* UltraSe7en Dashboard (no AI) + Obsidian-style graph visualizer (D3) */
 
-const LS_CATEGORIES = "ultrase7en.v0.categories";
-const LS_ENTRIES = "ultrase7en.v0.entries";     // array of entries across dates
-const LS_NODES = "ultrase7en.v0.nodes";         // array of nodes across dates
-const LS_LAST_DATE = "ultrase7en.v0.lastSeenDate";
+const LS_KEYS = {
+  categories: "ultrase7en_categories_v1",
+  today: "ultrase7en_today_v1",
+  web: "ultrase7en_web_v1",
+  lastDay: "ultrase7en_last_day_v1",
+};
 
 const DEFAULT_CATEGORIES = [
   "note",
   "project update",
-  "project",
   "to do",
   "goal",
-  "random"
+  "project",
+  "random",
 ];
 
-function isoTodayLocal() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+const el = (id) => document.getElementById(id);
 
-function now12h(ts = Date.now()) {
-  const d = new Date(ts);
+const state = {
+  categories: [],
+  today: [],
+  web: [],
+  autoSuggest: {
+    active: false,
+    list: [],
+    idx: 0,
+    mode: "category",
+  },
+  graph: {
+    drawer: null,
+    modal: null,
+    drawerGraph: null,
+    modalGraph: null,
+  },
+};
+
+function pad2(n){ return String(n).padStart(2,"0"); }
+function formatTime(d){
   let h = d.getHours();
-  const mm = String(d.getMinutes()).padStart(2, "0");
+  const m = pad2(d.getMinutes());
   const ampm = h >= 12 ? "PM" : "AM";
-  h = h % 12;
-  if (h === 0) h = 12;
-  return `${h}:${mm} ${ampm}`;
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${m} ${ampm}`;
+}
+function todayKey(d = new Date()){
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
 
-function uid() {
-  return (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`);
-}
-
-function loadJSON(key, fallback) {
-  try {
-    const v = localStorage.getItem(key);
-    return v ? JSON.parse(v) : fallback;
-  } catch {
+function loadJSON(key, fallback){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return fallback;
+    return JSON.parse(raw);
+  }catch{
     return fallback;
   }
 }
-
-function saveJSON(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+function saveJSON(key, val){
+  localStorage.setItem(key, JSON.stringify(val));
 }
 
-function normalizeCategoryName(s) {
-  return String(s || "").trim().replace(/\s+/g, " ");
+function normalizeCategory(s){
+  return String(s || "").trim().toLowerCase();
+}
+function displayCategory(s){
+  // render as uppercase label-like, but keep words
+  return String(s || "").trim().toUpperCase();
 }
 
-function escapeHTML(s="") {
-  return String(s).replace(/[&<>"']/g, m => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-  }[m]));
+function boot(){
+  // date display
+  const d = new Date();
+  el("todayDate").textContent = todayKey(d);
+
+  state.categories = loadJSON(LS_KEYS.categories, DEFAULT_CATEGORIES);
+  state.today = loadJSON(LS_KEYS.today, []);
+  state.web = loadJSON(LS_KEYS.web, []);
+
+  // auto-promote if day changed
+  const last = localStorage.getItem(LS_KEYS.lastDay);
+  const nowDay = todayKey();
+  if(last && last !== nowDay){
+    // promote everything in TODAY to WEB
+    if(state.today.length){
+      for(const item of state.today){
+        if(!item.inWeb){
+          item.inWeb = true;
+          state.web.push(makeWebItemFromToday(item));
+        }
+      }
+      state.today = [];
+      persist();
+    }
+  }
+  localStorage.setItem(LS_KEYS.lastDay, nowDay);
+
+  wireUI();
+  renderAll();
+  initGraphSystems();
 }
 
-/* ---------- State ---------- */
-let categories = [];
-let entries = [];
-let nodes = [];
-let editingEntryId = null;
+function persist(){
+  saveJSON(LS_KEYS.categories, state.categories);
+  saveJSON(LS_KEYS.today, state.today);
+  saveJSON(LS_KEYS.web, state.web);
+}
 
-/* ---------- Elements ---------- */
-const elTodayDate = document.getElementById("todayDate");
-const elInput = document.getElementById("entryInput");
-const elSubmit = document.getElementById("submitBtn");
-const elCmdError = document.getElementById("cmdError");
-const elToast = document.getElementById("toast");
+function wireUI(){
+  const input = el("commandInput");
 
-const elTodayEmpty = document.getElementById("todayEmpty");
-const elTodayList = document.getElementById("todayList");
-const elAddAll = document.getElementById("addAllBtn");
-const elClearToday = document.getElementById("clearTodayBtn");
+  el("submitBtn").addEventListener("click", () => handleSubmit());
+  input.addEventListener("keydown", (e) => handleInputKeydown(e));
+  input.addEventListener("input", () => handleInputChange());
 
-const elKnowledgeEmpty = document.getElementById("knowledgeEmpty");
-const elKnowledgeGroups = document.getElementById("knowledgeGroups");
+  el("addAllToWebBtn").addEventListener("click", () => addAllToWeb());
+  el("clearTodayBtn").addEventListener("click", () => clearToday());
 
-const elDrawer = document.getElementById("drawer");
-const elDrawerBackdrop = document.getElementById("drawerBackdrop");
-const elDrawerClose = document.getElementById("drawerClose");
-const elExpand = document.getElementById("expandBtn");
-const elDrawerKnowledgeEmpty = document.getElementById("drawerKnowledgeEmpty");
-const elDrawerKnowledgeGroups = document.getElementById("drawerKnowledgeGroups");
+  // graph controls
+  el("openGraphBtn").addEventListener("click", () => openDrawer());
+  el("expandGraphBtn").addEventListener("click", () => openModal());
 
-const elModal = document.getElementById("modal");
-const elModalBackdrop = document.getElementById("modalBackdrop");
-const elModalClose = document.getElementById("modalClose");
-const elModalCancel = document.getElementById("modalCancel");
-const elModalSave = document.getElementById("modalSave");
-const elModalText = document.getElementById("modalText");
-const elModalError = document.getElementById("modalError");
+  el("drawerCloseBtn").addEventListener("click", () => closeDrawer());
+  el("drawerExpandBtn").addEventListener("click", () => openModal());
 
-/* ---------- Autocomplete ---------- */
-const elAcBox = document.getElementById("acBox");
-const elAcList = document.getElementById("acList");
-let acItems = [];
-let acActive = 0;
-let acVisible = false;
+  el("graphFitBtn").addEventListener("click", () => state.graph.drawerGraph?.fit());
+  el("graphResetBtn").addEventListener("click", () => state.graph.drawerGraph?.reset());
+  el("graphSearch").addEventListener("input", (e) => {
+    state.graph.drawerGraph?.search(e.target.value);
+  });
 
-function showError(msg) {
-  if (!msg) {
-    elCmdError.style.display = "none";
-    elCmdError.textContent = "";
+  el("modalCloseBtn").addEventListener("click", () => closeModal());
+  el("modalFitBtn").addEventListener("click", () => state.graph.modalGraph?.fit());
+
+  // close modal by clicking backdrop
+  el("graphModal").addEventListener("click", (e) => {
+    if(e.target === el("graphModal")) closeModal();
+  });
+}
+
+function handleSubmit(){
+  const raw = el("commandInput").value || "";
+  const text = raw.trim();
+  if(!text) return;
+
+  // New category syntax: NC: Category Name
+  const ncMatch = text.match(/^nc\s*:\s*(.+)$/i);
+  if(ncMatch){
+    const catName = ncMatch[1].trim();
+    if(catName){
+      addCategory(catName);
+      el("commandInput").value = "";
+      hideAutocomplete();
+      renderAll();
+    }
     return;
   }
-  elCmdError.style.display = "block";
-  elCmdError.textContent = msg;
+
+  // Standard: category: message (category can include spaces)
+  const match = text.match(/^([^:]+)\s*:\s*([\s\S]+)$/);
+  if(!match){
+    // If no prefix, treat as "note"
+    addTodayItem("note", text);
+  }else{
+    const cat = match[1].trim();
+    const msg = match[2].trim();
+    if(!msg) return;
+    addTodayItem(cat, msg);
+  }
+
+  el("commandInput").value = "";
+  hideAutocomplete();
+  renderAll();
 }
 
-function showToast(msg) {
-  elToast.textContent = msg;
-  elToast.style.display = "block";
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => {
-    elToast.style.display = "none";
-    elToast.textContent = "";
-  }, 1800);
-}
-
-function ensureCategory(name) {
-  const n = normalizeCategoryName(name);
-  if (!n) return;
-  const exists = categories.some(c => c.toLowerCase() === n.toLowerCase());
-  if (!exists) {
-    categories.push(n);
-    categories.sort((a,b) => a.localeCompare(b));
-    saveJSON(LS_CATEGORIES, categories);
+function addCategory(name){
+  const n = normalizeCategory(name);
+  if(!n) return;
+  if(!state.categories.map(normalizeCategory).includes(n)){
+    state.categories.push(n);
+    state.categories = dedupe(state.categories.map(normalizeCategory));
+    persist();
   }
 }
 
-function getPrefixContext(text) {
-  // We only autocomplete the prefix portion before ":" on the current line.
-  const pos = elInput.selectionStart ?? text.length;
-  const before = text.slice(0, pos);
-  const lineStart = before.lastIndexOf("\n") + 1;
-  const line = before.slice(lineStart);
+function addTodayItem(category, message){
+  const catNorm = normalizeCategory(category);
+  if(!catNorm) return;
 
-  const colonIdx = line.indexOf(":");
-  const hasColon = colonIdx !== -1;
+  // auto-create category if unknown
+  if(!state.categories.map(normalizeCategory).includes(catNorm)){
+    state.categories.push(catNorm);
+  }
 
+  const item = {
+    id: crypto.randomUUID(),
+    category: catNorm,
+    message: message,
+    createdAt: Date.now(),
+    inWeb: false,
+  };
+
+  state.today.unshift(item);
+  persist();
+}
+
+function makeWebItemFromToday(todayItem){
   return {
-    pos,
-    lineStart,
-    line,
-    hasColon,
-    prefix: hasColon ? line.slice(0, colonIdx) : line,
-    afterColon: hasColon ? line.slice(colonIdx + 1) : ""
+    id: crypto.randomUUID(),
+    category: todayItem.category,
+    title: todayItem.message.split("\n")[0].slice(0, 80),
+    body: todayItem.message,
+    createdAt: todayItem.createdAt,
+    sourceTodayId: todayItem.id,
   };
 }
 
-function buildAutocomplete() {
-  const text = elInput.value;
-  const ctx = getPrefixContext(text);
+function addToWeb(todayId){
+  const t = state.today.find(x => x.id === todayId);
+  if(!t || t.inWeb) return;
 
-  // If user already typed ":" on this line, stop autocomplete.
-  if (ctx.hasColon) {
-    hideAutocomplete();
-    return;
-  }
+  t.inWeb = true;
+  state.web.unshift(makeWebItemFromToday(t));
+  persist();
+  renderAll();
+}
 
-  const raw = normalizeCategoryName(ctx.prefix);
-  if (!raw) {
-    hideAutocomplete();
-    return;
-  }
-
-  // Special: if they type "N" or "NC" we show NC command
-  const q = raw.toLowerCase();
-
-  // suggestions include categories AND NC command.
-  const sugg = [];
-
-  // NC command hint
-  if ("nc".startsWith(q)) {
-    sugg.push({ type: "cmd", value: "NC", display: "NC", right: "new category" });
-  }
-
-  // category suggestions
-  for (const c of categories) {
-    if (c.toLowerCase().startsWith(q)) {
-      sugg.push({ type: "cat", value: c, display: c, right: "category" });
+function addAllToWeb(){
+  let changed = false;
+  for(const t of state.today){
+    if(!t.inWeb){
+      t.inWeb = true;
+      state.web.unshift(makeWebItemFromToday(t));
+      changed = true;
     }
   }
+  if(changed){
+    persist();
+    renderAll();
+  }
+}
 
-  // If no suggestions, hide.
-  if (sugg.length === 0) {
+function clearToday(){
+  state.today = [];
+  persist();
+  renderAll();
+}
+
+function editToday(id){
+  const t = state.today.find(x => x.id === id);
+  if(!t) return;
+  const next = prompt("Edit entry:", t.message);
+  if(next === null) return;
+  const v = String(next).trim();
+  if(!v) return;
+  t.message = v;
+  persist();
+  renderAll();
+}
+
+function deleteToday(id){
+  state.today = state.today.filter(x => x.id !== id);
+  persist();
+  renderAll();
+}
+
+function dedupe(arr){
+  const out = [];
+  const seen = new Set();
+  for(const x of arr){
+    const n = normalizeCategory(x);
+    if(!seen.has(n)){
+      seen.add(n);
+      out.push(n);
+    }
+  }
+  return out;
+}
+
+/* -------- Autocomplete (CLI-like) --------
+   - When typing "no" -> suggests "note:"
+   - Up/Down cycles
+   - Tab completes the selected suggestion
+*/
+function handleInputChange(){
+  const input = el("commandInput");
+  const val = input.value;
+
+  // Only autocomplete if user is typing a prefix before ":" and hasn't typed ":" yet on the current line.
+  const lines = val.split("\n");
+  const current = lines[lines.length - 1];
+
+  // if line already contains ":" we don't autocomplete category
+  if(current.includes(":")){
     hideAutocomplete();
     return;
   }
 
-  // Remove duplicates case-insensitively
-  const seen = new Set();
-  acItems = sugg.filter(s => {
-    const k = `${s.type}:${s.value.toLowerCase()}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  const typed = current.trim().toLowerCase();
+  if(!typed){
+    hideAutocomplete();
+    return;
+  }
 
-  // Keep active in bounds
-  acActive = Math.max(0, Math.min(acActive, acItems.length - 1));
+  const candidates = state.categories
+    .map(normalizeCategory)
+    .filter(c => c.startsWith(typed))
+    .slice(0, 8);
+
+  if(!candidates.length){
+    hideAutocomplete();
+    return;
+  }
+
+  state.autoSuggest.active = true;
+  state.autoSuggest.list = candidates;
+  state.autoSuggest.idx = Math.min(state.autoSuggest.idx, candidates.length - 1);
 
   renderAutocomplete();
-  showAutocomplete();
 }
 
-function renderAutocomplete() {
-  elAcList.innerHTML = acItems.map((it, idx) => {
-    const active = idx === acActive ? "active" : "";
-    const badge = it.type === "cmd" ? "CMD" : "CAT";
-    return `
-      <div class="ac-item ${active}" data-idx="${idx}">
-        <div class="ac-left">
-          <span class="ac-badge">${badge}</span>
-          <span class="ac-text">${escapeHTML(it.display)}</span>
-        </div>
-        <div class="ac-right">${escapeHTML(it.right)}</div>
-      </div>
-    `;
-  }).join("");
-}
+function handleInputKeydown(e){
+  const input = el("commandInput");
 
-function showAutocomplete() {
-  acVisible = true;
-  elAcBox.style.display = "block";
-}
-
-function hideAutocomplete() {
-  acVisible = false;
-  elAcBox.style.display = "none";
-  elAcList.innerHTML = "";
-  acItems = [];
-  acActive = 0;
-}
-
-function applyAutocompleteSelection() {
-  if (!acVisible || acItems.length === 0) return false;
-
-  const text = elInput.value;
-  const ctx = getPrefixContext(text);
-  const sel = acItems[acActive];
-
-  // Replace current line prefix with selected value + ": "
-  const replacement = sel.type === "cmd" ? "NC: " : `${sel.value}: `;
-
-  // Replace from lineStart to cursor pos (only prefix part)
-  const before = text.slice(0, ctx.lineStart);
-  const after = text.slice(ctx.pos);
-
-  const newText = before + replacement + after.replace(/^\s*/, ""); // trim leading spaces after completion
-  elInput.value = newText;
-
-  // Move cursor to end of replacement
-  const newPos = (before + replacement).length;
-  elInput.setSelectionRange(newPos, newPos);
-
-  hideAutocomplete();
-  return true;
-}
-
-/* Click to pick suggestion */
-elAcList.addEventListener("click", (e) => {
-  const item = e.target.closest(".ac-item");
-  if (!item) return;
-  const idx = Number(item.dataset.idx);
-  if (Number.isFinite(idx)) {
-    acActive = idx;
-    applyAutocompleteSelection();
-  }
-});
-
-/* ---------- Parsing Commands ---------- */
-function parseLine(input) {
-  const raw = String(input || "").trim();
-  if (!raw) return { kind: "empty" };
-
-  const idx = raw.indexOf(":");
-  if (idx === -1) return { kind: "invalid", error: `Missing ":" — use "category: text" or "NC: Category Name".` };
-
-  const left = normalizeCategoryName(raw.slice(0, idx));
-  const right = raw.slice(idx + 1).trim();
-
-  if (!left) return { kind: "invalid", error: "Category is empty." };
-
-  // NC command
-  if (left.toLowerCase() === "nc") {
-    if (!right) return { kind: "invalid", error: 'NC requires a name. Example: "NC: Enrichment Projects"' };
-    const name = normalizeCategoryName(right);
-    return { kind: "newCategory", name };
-  }
-
-  // Regular entry
-  if (!right) return { kind: "invalid", error: "Text is empty after ':'." };
-  return { kind: "entry", category: left, text: right };
-}
-
-/* ---------- Entries & Nodes ---------- */
-function getTodayEntries() {
-  const today = isoTodayLocal();
-  return entries.filter(e => e.date === today).sort((a,b) => b.createdAt - a.createdAt);
-}
-
-function addEntry(category, text) {
-  const today = isoTodayLocal();
-  const entry = {
-    id: uid(),
-    date: today,
-    createdAt: Date.now(),
-    category: normalizeCategoryName(category),
-    text: String(text),
-    inWeb: false,
-    nodeIds: []
-  };
-  entries.push(entry);
-  saveJSON(LS_ENTRIES, entries);
-  return entry;
-}
-
-function updateEntry(id, category, text) {
-  const i = entries.findIndex(e => e.id === id);
-  if (i === -1) return false;
-  entries[i].category = normalizeCategoryName(category);
-  entries[i].text = String(text);
-  saveJSON(LS_ENTRIES, entries);
-  return true;
-}
-
-function deleteEntry(id) {
-  entries = entries.filter(e => e.id !== id);
-  saveJSON(LS_ENTRIES, entries);
-}
-
-function promoteEntryToWeb(entryId) {
-  const i = entries.findIndex(e => e.id === entryId);
-  if (i === -1) return false;
-  const e = entries[i];
-  if (e.inWeb) return true;
-
-  ensureCategory(e.category);
-
-  // Node shape: deterministic (no AI)
-  const node = {
-    id: uid(),
-    createdAt: Date.now(),
-    date: e.date,
-    category: e.category,
-    title: e.text.length > 80 ? e.text.slice(0, 80) + "…" : e.text,
-    detail: e.text,
-    sourceEntryId: e.id
-  };
-
-  nodes.push(node);
-  e.inWeb = true;
-  e.nodeIds = [node.id];
-
-  saveJSON(LS_NODES, nodes);
-  saveJSON(LS_ENTRIES, entries);
-  return true;
-}
-
-function promoteAllTodayToWeb() {
-  const todays = getTodayEntries();
-  let count = 0;
-  for (const e of todays) {
-    if (!e.inWeb) {
-      promoteEntryToWeb(e.id);
-      count++;
-    }
-  }
-  return count;
-}
-
-/* Auto-promote when date changes (practical “end of day”) */
-function autoPromotePreviousDay(lastDate, today) {
-  if (!lastDate || lastDate === today) return { promoted: 0 };
-
-  // Promote unsynced entries from lastDate
-  const target = entries.filter(e => e.date === lastDate && !e.inWeb);
-  let promoted = 0;
-  for (const e of target) {
-    if (promoteEntryToWeb(e.id)) promoted++;
-  }
-  return { promoted };
-}
-
-/* ---------- Rendering ---------- */
-function renderToday() {
-  const todays = getTodayEntries();
-  elTodayDate.textContent = isoTodayLocal();
-
-  if (todays.length === 0) {
-    elTodayEmpty.style.display = "block";
-    elTodayList.innerHTML = "";
-    return;
-  }
-
-  elTodayEmpty.style.display = "none";
-  elTodayList.innerHTML = todays.map(e => {
-    const disabled = e.inWeb ? "disabled" : "";
-    const status = e.inWeb ? `<span class="pill" style="border-color: rgba(120,255,200,0.20); background: rgba(120,255,200,0.06); color: var(--ok);">IN WEB</span>` : "";
-    return `
-      <div class="card">
-        <div class="card-top">
-          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            <span class="pill">${escapeHTML(e.category)}</span>
-            ${status}
-          </div>
-          <div class="card-meta">${escapeHTML(now12h(e.createdAt))}</div>
-        </div>
-
-        <div class="card-text">${escapeHTML(e.text)}</div>
-
-        <div class="card-actions">
-          <button class="mini" data-action="web" data-id="${e.id}" ${disabled}>ADD TO WEB</button>
-          <button class="mini" data-action="edit" data-id="${e.id}">EDIT</button>
-          <button class="mini" data-action="del" data-id="${e.id}">DELETE</button>
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-function groupNodesByCategory(nodesArr) {
-  const map = new Map();
-  for (const c of categories) map.set(c, []); // show empty groups too
-  for (const n of nodesArr) {
-    const cat = normalizeCategoryName(n.category);
-    if (!map.has(cat)) map.set(cat, []);
-    map.get(cat).push(n);
-  }
-
-  // Sort nodes newest first within category
-  for (const [k, arr] of map.entries()) {
-    arr.sort((a,b) => b.createdAt - a.createdAt);
-    map.set(k, arr);
-  }
-
-  // Sort categories alpha, but keep ones with content near top
-  const sorted = Array.from(map.entries()).sort((a,b) => {
-    const aCount = a[1].length, bCount = b[1].length;
-    if (aCount !== bCount) return bCount - aCount;
-    return a[0].localeCompare(b[0]);
-  });
-
-  return sorted;
-}
-
-function renderKnowledgeInto(containerEmpty, containerGroups, inDrawer=false) {
-  if (nodes.length === 0) {
-    containerEmpty.style.display = "block";
-    containerGroups.innerHTML = "";
-    return;
-  }
-
-  containerEmpty.style.display = "none";
-
-  const groups = groupNodesByCategory(nodes);
-
-  containerGroups.innerHTML = groups.map(([cat, arr]) => {
-    const count = arr.length;
-    const nodesHtml = arr.slice(0, inDrawer ? 9999 : 6).map(n => `
-      <div class="node">
-        <div class="node-top">
-          <div class="node-title">${escapeHTML(n.title)}</div>
-          <div class="card-meta">${escapeHTML(now12h(n.createdAt))}</div>
-        </div>
-        <div class="node-sub">${escapeHTML(n.detail)}</div>
-      </div>
-    `).join("");
-
-    const truncated = (!inDrawer && count > 6)
-      ? `<div class="node-sub" style="padding: 2px 2px 0; color: rgba(255,255,255,0.42);">+${count - 6} more</div>`
-      : "";
-
-    return `
-      <div class="group">
-        <div class="group-head">
-          <div class="group-title">
-            <span class="pill" style="border-color: rgba(255,255,255,0.10); background: rgba(0,0,0,0.10); color: rgba(255,255,255,0.70); letter-spacing: 0.20em;">
-              ${escapeHTML(cat)}
-            </span>
-          </div>
-          <div class="group-count">${count} NODE${count === 1 ? "" : "S"}</div>
-        </div>
-        <div class="node-list">
-          ${nodesHtml}
-          ${truncated}
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderKnowledge() {
-  renderKnowledgeInto(elKnowledgeEmpty, elKnowledgeGroups, false);
-  renderKnowledgeInto(elDrawerKnowledgeEmpty, elDrawerKnowledgeGroups, true);
-}
-
-/* ---------- Modal (Edit) ---------- */
-function openModalForEntry(entryId) {
-  const e = entries.find(x => x.id === entryId);
-  if (!e) return;
-
-  editingEntryId = entryId;
-  elModalText.value = `${e.category}: ${e.text}`;
-
-  elModalError.style.display = "none";
-  elModalError.textContent = "";
-
-  elModal.setAttribute("aria-hidden", "false");
-}
-
-function closeModal() {
-  editingEntryId = null;
-  elModal.setAttribute("aria-hidden", "true");
-}
-
-function modalError(msg) {
-  if (!msg) {
-    elModalError.style.display = "none";
-    elModalError.textContent = "";
-    return;
-  }
-  elModalError.style.display = "block";
-  elModalError.textContent = msg;
-}
-
-/* ---------- Drawer ---------- */
-function openDrawer() { elDrawer.setAttribute("aria-hidden", "false"); }
-function closeDrawer() { elDrawer.setAttribute("aria-hidden", "true"); }
-
-/* ---------- Event Handlers ---------- */
-elSubmit.addEventListener("click", () => {
-  showError("");
-  const raw = elInput.value.trim();
-  if (!raw) return;
-
-  const parsed = parseLine(raw);
-  if (parsed.kind === "invalid") {
-    showError(parsed.error);
-    return;
-  }
-
-  if (parsed.kind === "newCategory") {
-    ensureCategory(parsed.name);
-    elInput.value = "";
-    hideAutocomplete();
-    renderKnowledge(); // shows empty group if needed
-    showToast(`Category added: ${parsed.name}`);
-    return;
-  }
-
-  if (parsed.kind === "entry") {
-    ensureCategory(parsed.category); // auto-add if new
-    addEntry(parsed.category, parsed.text);
-    elInput.value = "";
-    hideAutocomplete();
-    renderToday();
-    showToast("Saved to Today");
-    return;
-  }
-});
-
-elInput.addEventListener("input", () => {
-  showError("");
-  buildAutocomplete();
-});
-
-elInput.addEventListener("keydown", (e) => {
-  // Only handle autocomplete keys when box visible
-  if (acVisible) {
-    if (e.key === "ArrowDown") {
+  if(state.autoSuggest.active){
+    if(e.key === "ArrowDown"){
       e.preventDefault();
-      acActive = (acActive + 1) % acItems.length;
+      state.autoSuggest.idx = (state.autoSuggest.idx + 1) % state.autoSuggest.list.length;
       renderAutocomplete();
       return;
     }
-    if (e.key === "ArrowUp") {
+    if(e.key === "ArrowUp"){
       e.preventDefault();
-      acActive = (acActive - 1 + acItems.length) % acItems.length;
+      state.autoSuggest.idx = (state.autoSuggest.idx - 1 + state.autoSuggest.list.length) % state.autoSuggest.list.length;
       renderAutocomplete();
       return;
     }
-    if (e.key === "Tab") {
+    if(e.key === "Tab"){
       e.preventDefault();
-      applyAutocompleteSelection();
+      applyAutocomplete();
       return;
     }
-    if (e.key === "Escape") {
+    if(e.key === "Escape"){
       hideAutocomplete();
       return;
     }
-  } else {
-    // If user hits Tab and they are typing prefix, try to open suggestions
-    if (e.key === "Tab") {
-      const ctx = getPrefixContext(elInput.value);
-      if (!ctx.hasColon) {
-        buildAutocomplete();
-        if (acVisible) {
-          e.preventDefault();
-          applyAutocompleteSelection();
-        }
-      }
-    }
-  }
-});
-
-document.addEventListener("click", (e) => {
-  // click outside autocomplete hides it
-  const isInside = e.target.closest(".autocomplete-wrap");
-  if (!isInside) hideAutocomplete();
-});
-
-elTodayList.addEventListener("click", (e) => {
-  const btn = e.target.closest("button");
-  if (!btn) return;
-
-  const action = btn.dataset.action;
-  const id = btn.dataset.id;
-  if (!action || !id) return;
-
-  if (action === "web") {
-    promoteEntryToWeb(id);
-    renderToday();
-    renderKnowledge();
-    showToast("Added to Web");
-    return;
   }
 
-  if (action === "edit") {
-    openModalForEntry(id);
-    return;
+  // Ctrl/Cmd + Enter submits
+  if((e.ctrlKey || e.metaKey) && e.key === "Enter"){
+    e.preventDefault();
+    handleSubmit();
   }
-
-  if (action === "del") {
-    deleteEntry(id);
-    renderToday();
-    showToast("Deleted");
-    return;
-  }
-});
-
-elAddAll.addEventListener("click", () => {
-  const count = promoteAllTodayToWeb();
-  renderToday();
-  renderKnowledge();
-  showToast(count === 0 ? "Nothing to add" : `Added ${count} to Web`);
-});
-
-elClearToday.addEventListener("click", () => {
-  const today = isoTodayLocal();
-  entries = entries.filter(e => e.date !== today);
-  saveJSON(LS_ENTRIES, entries);
-  renderToday();
-  showToast("Today cleared");
-});
-
-elExpand.addEventListener("click", () => {
-  openDrawer();
-});
-
-elDrawerBackdrop.addEventListener("click", closeDrawer);
-elDrawerClose.addEventListener("click", closeDrawer);
-
-/* Modal events */
-elModalBackdrop.addEventListener("click", closeModal);
-elModalClose.addEventListener("click", closeModal);
-elModalCancel.addEventListener("click", closeModal);
-
-elModalSave.addEventListener("click", () => {
-  modalError("");
-  if (!editingEntryId) return;
-
-  const raw = elModalText.value.trim();
-  const parsed = parseLine(raw);
-
-  if (parsed.kind !== "entry") {
-    modalError(parsed.kind === "invalid" ? parsed.error : "Editing requires an entry: category: text");
-    return;
-  }
-
-  // If entry already in web, keep it in web but do not auto-create new node.
-  // (Simple v0 rule: editing changes the entry, but the web node remains as-is.)
-  // Later we can add "Update Web Node" button if you want.
-  ensureCategory(parsed.category);
-  updateEntry(editingEntryId, parsed.category, parsed.text);
-
-  closeModal();
-  renderToday();
-  renderKnowledge();
-  showToast("Saved");
-});
-
-/* ---------- Boot ---------- */
-function boot() {
-  const today = isoTodayLocal();
-  elTodayDate.textContent = today;
-
-  categories = loadJSON(LS_CATEGORIES, null);
-  if (!Array.isArray(categories) || categories.length === 0) {
-    categories = [...DEFAULT_CATEGORIES];
-    saveJSON(LS_CATEGORIES, categories);
-  } else {
-    // Normalize + sort
-    categories = categories.map(normalizeCategoryName).filter(Boolean);
-    categories = Array.from(new Set(categories.map(c => c))).sort((a,b) => a.localeCompare(b));
-    saveJSON(LS_CATEGORIES, categories);
-  }
-
-  entries = loadJSON(LS_ENTRIES, []);
-  if (!Array.isArray(entries)) entries = [];
-
-  nodes = loadJSON(LS_NODES, []);
-  if (!Array.isArray(nodes)) nodes = [];
-
-  // Auto-promote previous day entries if date changed since last open
-  const lastSeen = localStorage.getItem(LS_LAST_DATE);
-  const result = autoPromotePreviousDay(lastSeen, today);
-  localStorage.setItem(LS_LAST_DATE, today);
-
-  if (result.promoted > 0) {
-    showToast(`Auto-added ${result.promoted} from ${lastSeen} to Web`);
-  }
-
-  renderToday();
-  renderKnowledge();
 }
 
+function applyAutocomplete(){
+  const input = el("commandInput");
+  const val = input.value;
+  const lines = val.split("\n");
+  const current = lines[lines.length - 1];
+
+  const pick = state.autoSuggest.list[state.autoSuggest.idx];
+  const completed = `${pick}: `;
+
+  // Replace current line with completed prefix
+  lines[lines.length - 1] = completed;
+  input.value = lines.join("\n");
+  hideAutocomplete();
+
+  // place cursor at end
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
+function renderAutocomplete(){
+  const box = el("autocomplete");
+  box.innerHTML = "";
+  state.autoSuggest.list.forEach((s, i) => {
+    const div = document.createElement("div");
+    div.className = "suggest" + (i === state.autoSuggest.idx ? " active" : "");
+    div.textContent = `${displayCategory(s)}:`;
+    div.addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      state.autoSuggest.idx = i;
+      applyAutocomplete();
+    });
+    box.appendChild(div);
+  });
+  box.classList.remove("hidden");
+}
+
+function hideAutocomplete(){
+  state.autoSuggest.active = false;
+  state.autoSuggest.list = [];
+  state.autoSuggest.idx = 0;
+  el("autocomplete").classList.add("hidden");
+}
+
+/* -------- Rendering -------- */
+
+function renderAll(){
+  renderToday();
+  renderWeb();
+  rebuildGraphs(); // keep graph in sync with web data
+}
+
+function renderToday(){
+  const list = el("todayList");
+  const empty = el("todayEmpty");
+  list.innerHTML = "";
+
+  if(!state.today.length){
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+
+  for(const item of state.today){
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.todayId = item.id;
+
+    const top = document.createElement("div");
+    top.className = "card-top";
+
+    const pills = document.createElement("div");
+    pills.className = "pills";
+
+    const catPill = document.createElement("span");
+    catPill.className = "pill purple";
+    catPill.textContent = displayCategory(item.category);
+
+    pills.appendChild(catPill);
+
+    if(item.inWeb){
+      const inWeb = document.createElement("span");
+      inWeb.className = "pill green";
+      inWeb.textContent = "IN WEB";
+      pills.appendChild(inWeb);
+    }
+
+    const time = document.createElement("div");
+    time.className = "time";
+    time.textContent = formatTime(new Date(item.createdAt));
+
+    top.appendChild(pills);
+    top.appendChild(time);
+
+    const text = document.createElement("div");
+    text.className = "card-text";
+    text.textContent = item.message;
+
+    const actions = document.createElement("div");
+    actions.className = "card-actions";
+
+    const addBtn = document.createElement("button");
+    addBtn.className = "btn btn-ghost";
+    addBtn.textContent = "ADD TO WEB";
+    addBtn.disabled = !!item.inWeb;
+    addBtn.addEventListener("click", () => addToWeb(item.id));
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-ghost";
+    editBtn.textContent = "EDIT";
+    editBtn.addEventListener("click", () => editToday(item.id));
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn btn-ghost";
+    delBtn.textContent = "DELETE";
+    delBtn.addEventListener("click", () => deleteToday(item.id));
+
+    actions.appendChild(addBtn);
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+
+    card.appendChild(top);
+    card.appendChild(text);
+    card.appendChild(actions);
+
+    list.appendChild(card);
+  }
+}
+
+function renderWeb(){
+  const groupsWrap = el("webGroups");
+  groupsWrap.innerHTML = "";
+
+  const categories = dedupe(state.categories);
+
+  for(const cat of categories){
+    const items = state.web.filter(w => normalizeCategory(w.category) === normalizeCategory(cat));
+
+    const group = document.createElement("div");
+    group.className = "group";
+    group.dataset.category = cat;
+
+    const head = document.createElement("div");
+    head.className = "group-head";
+
+    const title = document.createElement("div");
+    title.className = "group-title";
+
+    const pill = document.createElement("span");
+    pill.className = "pill";
+    pill.textContent = displayCategory(cat);
+
+    const count = document.createElement("div");
+    count.className = "group-count";
+    count.textContent = `${items.length} NODE${items.length === 1 ? "" : "S"}`;
+
+    title.appendChild(pill);
+    head.appendChild(title);
+    head.appendChild(count);
+
+    const body = document.createElement("div");
+    body.className = "group-body";
+
+    if(items.length){
+      for(const w of items.slice(0, 6)){
+        const item = document.createElement("div");
+        item.className = "web-item";
+        item.dataset.webId = w.id;
+
+        const itTitle = document.createElement("div");
+        itTitle.className = "web-item-title";
+
+        const b = document.createElement("b");
+        b.textContent = w.title || "entry";
+
+        const t = document.createElement("div");
+        t.className = "time";
+        t.textContent = formatTime(new Date(w.createdAt));
+
+        itTitle.appendChild(b);
+        itTitle.appendChild(t);
+
+        const sub = document.createElement("div");
+        sub.className = "web-item-sub";
+        sub.textContent = (w.body || "").slice(0, 80);
+
+        item.appendChild(itTitle);
+        item.appendChild(sub);
+
+        item.addEventListener("click", () => {
+          // highlight + open graph + focus node
+          highlightWebItem(w.id);
+          openDrawer();
+          state.graph.drawerGraph?.focusNode(w.id);
+        });
+
+        body.appendChild(item);
+      }
+    }
+
+    group.appendChild(head);
+    group.appendChild(body);
+    groupsWrap.appendChild(group);
+  }
+}
+
+function highlightWebItem(webId){
+  document.querySelectorAll(".web-item").forEach(x => x.classList.remove("highlight"));
+  const target = document.querySelector(`.web-item[data-web-id="${webId}"]`);
+  if(target){
+    target.classList.add("highlight");
+    target.scrollIntoView({behavior:"smooth", block:"center"});
+    setTimeout(() => target.classList.remove("highlight"), 1200);
+  }
+}
+
+/* -------- Graph (Obsidian-like) --------
+   - Category nodes + Entry nodes
+   - Edges: Category -> Entry
+   - Zoom/Pan, Drag, Click for details
+*/
+
+function openDrawer(){
+  const dr = el("graphDrawer");
+  dr.classList.add("open");
+  dr.setAttribute("aria-hidden", "false");
+  // ensure graph sizes after drawer animation
+  setTimeout(() => state.graph.drawerGraph?.resize(), 240);
+}
+function closeDrawer(){
+  const dr = el("graphDrawer");
+  dr.classList.remove("open");
+  dr.setAttribute("aria-hidden", "true");
+}
+function openModal(){
+  const m = el("graphModal");
+  m.classList.remove("hidden");
+  m.setAttribute("aria-hidden", "false");
+  setTimeout(() => state.graph.modalGraph?.resize(), 50);
+  // optional: also close drawer so you don't have both
+  closeDrawer();
+}
+function closeModal(){
+  const m = el("graphModal");
+  m.classList.add("hidden");
+  m.setAttribute("aria-hidden", "true");
+}
+
+function initGraphSystems(){
+  state.graph.drawerGraph = createGraphSystem({
+    svgEl: el("graphSvg"),
+    detailsEl: el("graphDetails"),
+  });
+
+  state.graph.modalGraph = createGraphSystem({
+    svgEl: el("graphSvgModal"),
+    detailsEl: el("graphDetailsModal"),
+  });
+
+  rebuildGraphs();
+}
+
+function rebuildGraphs(){
+  const data = buildGraphData();
+  state.graph.drawerGraph?.setData(data);
+  state.graph.modalGraph?.setData(data);
+}
+
+function buildGraphData(){
+  // Nodes:
+  // - category nodes: id = "cat:<name>"
+  // - entry nodes: id = webItem.id
+  // Links: cat -> entry
+  const nodes = [];
+  const links = [];
+
+  const cats = dedupe(state.categories).map(normalizeCategory);
+
+  for(const c of cats){
+    nodes.push({
+      id: `cat:${c}`,
+      type: "category",
+      label: displayCategory(c),
+      category: c,
+    });
+  }
+
+  for(const w of state.web){
+    const cat = normalizeCategory(w.category);
+    nodes.push({
+      id: w.id,
+      type: "entry",
+      label: (w.title || w.body || "entry").slice(0, 28),
+      category: cat,
+      body: w.body || "",
+      createdAt: w.createdAt,
+    });
+    links.push({
+      source: `cat:${cat}`,
+      target: w.id,
+    });
+  }
+
+  return { nodes, links };
+}
+
+function createGraphSystem({ svgEl, detailsEl }){
+  const svg = d3.select(svgEl);
+  const rootG = svg.append("g");
+  const linkG = rootG.append("g").attr("class", "links");
+  const nodeG = rootG.append("g").attr("class", "nodes");
+
+  const zoom = d3.zoom()
+    .scaleExtent([0.2, 3.0])
+    .on("zoom", (event) => rootG.attr("transform", event.transform));
+
+  svg.call(zoom);
+
+  let sim = null;
+  let data = { nodes: [], links: [] };
+
+  const palette = {
+    catStroke: "rgba(167,139,250,.35)",
+    catFill: "rgba(167,139,250,.10)",
+    entryStroke: "rgba(255,255,255,.16)",
+    entryFill: "rgba(0,0,0,.20)",
+    link: "rgba(255,255,255,.10)",
+    active: "rgba(167,139,250,.85)",
+  };
+
+  function resize(){
+    const rect = svgEl.getBoundingClientRect();
+    svg.attr("width", rect.width).attr("height", rect.height);
+    sim?.alpha(0.4).restart();
+  }
+
+  function setDetails(title, body){
+    const t = detailsEl.querySelector(".graph-details-title");
+    const b = detailsEl.querySelector(".graph-details-body");
+    if(t) t.textContent = title;
+    if(b) b.textContent = body;
+  }
+
+  function setData(next){
+    data = next;
+
+    // clear existing
+    linkG.selectAll("*").remove();
+    nodeG.selectAll("*").remove();
+    sim?.stop();
+
+    const rect = svgEl.getBoundingClientRect();
+    svg.attr("width", rect.width).attr("height", rect.height);
+
+    const links = linkG.selectAll("line")
+      .data(data.links, d => `${d.source}->${d.target}`)
+      .enter()
+      .append("line")
+      .attr("stroke", palette.link)
+      .attr("stroke-width", 1);
+
+    const nodes = nodeG.selectAll("g")
+      .data(data.nodes, d => d.id)
+      .enter()
+      .append("g")
+      .attr("cursor", "pointer");
+
+    // circles
+    nodes.append("circle")
+      .attr("r", d => d.type === "category" ? 18 : 10)
+      .attr("fill", d => d.type === "category" ? palette.catFill : palette.entryFill)
+      .attr("stroke", d => d.type === "category" ? palette.catStroke : palette.entryStroke)
+      .attr("stroke-width", d => d.type === "category" ? 2 : 1);
+
+    // labels
+    nodes.append("text")
+      .text(d => d.type === "category" ? d.label : "")
+      .attr("x", d => d.type === "category" ? 24 : 14)
+      .attr("y", 4)
+      .attr("fill", "rgba(233,233,238,.75)")
+      .attr("font-size", 11)
+      .attr("font-family", "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace")
+      .attr("letter-spacing", ".12em");
+
+    // drag
+    nodes.call(
+      d3.drag()
+        .on("start", (event, d) => {
+          if(!event.active) sim.alphaTarget(0.3).restart();
+          d.fx = d.x; d.fy = d.y;
+        })
+        .on("drag", (event, d) => {
+          d.fx = event.x; d.fy = event.y;
+        })
+        .on("end", (event, d) => {
+          if(!event.active) sim.alphaTarget(0);
+          d.fx = null; d.fy = null;
+        })
+    );
+
+    // click
+    nodes.on("click", (event, d) => {
+      event.stopPropagation();
+
+      // set active styles
+      nodeG.selectAll("circle")
+        .attr("stroke", n => n.id === d.id ? palette.active : (n.type === "category" ? palette.catStroke : palette.entryStroke))
+        .attr("stroke-width", n => n.id === d.id ? 2.5 : (n.type === "category" ? 2 : 1));
+
+      if(d.type === "category"){
+        const count = data.nodes.filter(x => x.type === "entry" && x.category === d.category).length;
+        setDetails(
+          `Category: ${displayCategory(d.category)}`,
+          `${count} node(s) in this category.`
+        );
+      }else{
+        setDetails(
+          `${displayCategory(d.category)} • ${formatTime(new Date(d.createdAt))}`,
+          d.body || ""
+        );
+        highlightWebItem(d.id);
+      }
+    });
+
+    // click background clears selection
+    svg.on("click", () => {
+      nodeG.selectAll("circle")
+        .attr("stroke", n => n.type === "category" ? palette.catStroke : palette.entryStroke)
+        .attr("stroke-width", n => n.type === "category" ? 2 : 1);
+      setDetails("Select a node", "Click a category or an entry to view details.");
+    });
+
+    // force sim
+    sim = d3.forceSimulation(data.nodes)
+      .force("link", d3.forceLink(data.links).id(d => d.id).distance(d => 70).strength(0.6))
+      .force("charge", d3.forceManyBody().strength(-230))
+      .force("center", d3.forceCenter(rect.width / 2, rect.height / 2))
+      .force("collide", d3.forceCollide().radius(d => d.type === "category" ? 26 : 16))
+      .on("tick", () => {
+        links
+          .attr("x1", d => d.source.x)
+          .attr("y1", d => d.source.y)
+          .attr("x2", d => d.target.x)
+          .attr("y2", d => d.target.y);
+
+        nodes.attr("transform", d => `translate(${d.x},${d.y})`);
+      });
+
+    fit();
+  }
+
+  function fit(){
+    const rect = svgEl.getBoundingClientRect();
+    if(!data.nodes.length) return;
+    // compute bounds
+    const xs = data.nodes.map(n => n.x ?? 0);
+    const ys = data.nodes.map(n => n.y ?? 0);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+
+    const w = maxX - minX || 1;
+    const h = maxY - minY || 1;
+
+    const scale = Math.max(0.25, Math.min(1.6, 0.86 / Math.max(w / rect.width, h / rect.height)));
+    const tx = (rect.width - scale * (minX + maxX)) / 2;
+    const ty = (rect.height - scale * (minY + maxY)) / 2;
+
+    svg.transition().duration(450).call(
+      zoom.transform,
+      d3.zoomIdentity.translate(tx, ty).scale(scale)
+    );
+  }
+
+  function reset(){
+    sim?.alpha(0.8).restart();
+    fit();
+  }
+
+  function search(q){
+    const query = String(q || "").trim().toLowerCase();
+    if(!query){
+      nodeG.selectAll("circle").attr("opacity", 1);
+      nodeG.selectAll("text").attr("opacity", 1);
+      linkG.selectAll("line").attr("opacity", 1);
+      return;
+    }
+
+    const match = (d) => {
+      if(d.type === "category") return d.category.includes(query) || d.label.toLowerCase().includes(query);
+      return (d.body || "").toLowerCase().includes(query) || (d.label || "").toLowerCase().includes(query);
+    };
+
+    nodeG.selectAll("circle").attr("opacity", d => match(d) ? 1 : 0.18);
+    nodeG.selectAll("text").attr("opacity", d => match(d) ? 1 : 0.18);
+    linkG.selectAll("line").attr("opacity", d => {
+      const s = typeof d.source === "object" ? d.source : null;
+      const t = typeof d.target === "object" ? d.target : null;
+      if(!s || !t) return 0.12;
+      return (match(s) || match(t)) ? 0.9 : 0.08;
+    });
+  }
+
+  function focusNode(nodeId){
+    const n = data.nodes.find(x => x.id === nodeId);
+    if(!n) return;
+    // center on node
+    const rect = svgEl.getBoundingClientRect();
+    const scale = 1.25;
+    const tx = rect.width / 2 - (n.x * scale);
+    const ty = rect.height / 2 - (n.y * scale);
+    svg.transition().duration(450).call(
+      zoom.transform,
+      d3.zoomIdentity.translate(tx, ty).scale(scale)
+    );
+  }
+
+  return { setData, resize, fit, reset, search, focusNode };
+}
+
+/* boot */
 boot();

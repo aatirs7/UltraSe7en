@@ -1,149 +1,137 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>UltraSe7en — Dashboard</title>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UltraSe7en — Dashboard</title>
+  <link rel="stylesheet" href="./dashboard.css" />
+  <!-- D3 for force graph -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+</head>
+<body>
+  <div class="bg"></div>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&display=swap"
-      rel="stylesheet"
-    />
+  <header class="topbar">
+    <div class="brand">ULTRASE7EN — DASHBOARD</div>
+    <div class="topbar-right">
+      <div id="todayDate" class="date"></div>
+    </div>
+  </header>
 
-    <link rel="stylesheet" href="./dashboard.css" />
-  </head>
-
-  <body>
-    <div class="bg"></div>
-
-    <header class="topbar">
-      <div class="brand">ULTRASE7EN — DASHBOARD</div>
-      <div class="topbar-right">
-        <div id="todayDate" class="date-pill">—</div>
+  <main class="grid">
+    <!-- COMMAND -->
+    <section class="panel panel-command">
+      <div class="panel-header">
+        <div class="panel-title">COMMAND</div>
       </div>
-    </header>
 
-    <main class="grid">
-      <!-- COMMAND -->
-      <section class="panel panel-command">
-        <div class="panel-head">
-          <div class="panel-title">COMMAND</div>
+      <div class="panel-body">
+        <div class="hint">
+          <div>Format: <b>category:</b> your text (category can include spaces)</div>
+          <div>New category: <b>NC:</b> Category Name</div>
+          <div>Autocomplete: <b>Tab</b> completes • <b>↑/↓</b> cycles</div>
         </div>
 
-        <div class="panel-body">
-          <label class="helper">
-            Format: <span class="mono">category: your text</span>
-            <span class="muted">(category can include spaces)</span><br />
-            New category: <span class="mono">NC: Category Name</span><br />
-            Autocomplete: <span class="mono">Tab</span> completes • <span class="mono">↑/↓</span> cycles
-          </label>
-
-          <div class="autocomplete-wrap">
-            <textarea
-              id="entryInput"
-              class="input"
-              rows="5"
-              spellcheck="false"
-              placeholder="Examples:
+        <div class="command-box">
+          <textarea id="commandInput" spellcheck="false" placeholder="Examples:
 note: fixed DNS issues in containers
-project update: built the node feature
+project update: built the web visualizer
 to do: refactor dashboard layout
-NC: Enrichment Projects"
-            ></textarea>
+NC: Enrichment Projects"></textarea>
 
-            <div id="acBox" class="ac-box" style="display:none;">
-              <div class="ac-hint">TAB to complete • ↑/↓ to cycle</div>
-              <div id="acList" class="ac-list"></div>
-            </div>
-          </div>
-
-          <div class="cmd-footer">
-            <div class="fineprint">
+          <div class="command-footer">
+            <div class="micro">
               SUBMIT saves to <b>TODAY</b>. Promote to <b>WEB</b> manually, or it will auto-promote on the next day.
             </div>
             <button id="submitBtn" class="btn btn-primary">SUBMIT</button>
           </div>
 
-          <div id="cmdError" class="error" style="display:none;"></div>
-          <div id="toast" class="toast" style="display:none;"></div>
-        </div>
-      </section>
-
-      <!-- TODAY -->
-      <section class="panel panel-today">
-        <div class="panel-head panel-head-row">
-          <div class="panel-title">TODAY</div>
-          <div class="head-actions">
-            <button id="addAllBtn" class="btn btn-ghost">ADD ALL TO WEB</button>
-            <button id="clearTodayBtn" class="btn btn-ghost danger">CLEAR TODAY</button>
-          </div>
-        </div>
-
-        <div class="panel-body">
-          <div id="todayEmpty" class="empty">No entries yet.</div>
-          <div id="todayList" class="list"></div>
-        </div>
-      </section>
-
-      <!-- WEB / KNOWLEDGE -->
-      <section class="panel panel-knowledge">
-        <div class="panel-head panel-head-row">
-          <div class="panel-title">WEB</div>
-          <div class="head-actions">
-            <button id="expandBtn" class="btn btn-ghost">EXPAND</button>
-          </div>
-        </div>
-
-        <div class="panel-body panel-body-tight">
-          <div id="knowledgeEmpty" class="empty">No nodes yet.</div>
-          <div id="knowledgeGroups" class="knowledge"></div>
-        </div>
-      </section>
-    </main>
-
-    <!-- WEB DRAWER -->
-    <aside id="drawer" class="drawer" aria-hidden="true">
-      <div class="drawer-backdrop" id="drawerBackdrop"></div>
-
-      <div class="drawer-panel">
-        <div class="drawer-head">
-          <div class="drawer-title">WEB</div>
-          <button id="drawerClose" class="btn btn-ghost">CLOSE</button>
-        </div>
-
-        <div class="drawer-body">
-          <div id="drawerKnowledgeEmpty" class="empty">No nodes yet.</div>
-          <div id="drawerKnowledgeGroups" class="knowledge"></div>
+          <div id="autocomplete" class="autocomplete hidden"></div>
         </div>
       </div>
-    </aside>
+    </section>
 
-    <!-- EDIT MODAL -->
-    <div id="modal" class="modal" aria-hidden="true">
-      <div class="modal-backdrop" id="modalBackdrop"></div>
-
-      <div class="modal-panel">
-        <div class="modal-head">
-          <div class="modal-title">EDIT ENTRY</div>
-          <button id="modalClose" class="btn btn-ghost">CLOSE</button>
+    <!-- TODAY -->
+    <section class="panel panel-today">
+      <div class="panel-header">
+        <div class="panel-title">TODAY</div>
+        <div class="panel-actions">
+          <button id="addAllToWebBtn" class="btn btn-ghost">ADD ALL TO WEB</button>
+          <button id="clearTodayBtn" class="btn btn-danger">CLEAR TODAY</button>
         </div>
+      </div>
 
-        <div class="modal-body">
-          <label class="helper">Format: <span class="mono">category: text</span></label>
-          <textarea id="modalText" class="input" rows="5" spellcheck="false"></textarea>
+      <div class="panel-body">
+        <div id="todayList" class="list"></div>
+        <div id="todayEmpty" class="empty">No entries yet.</div>
+      </div>
+    </section>
 
-          <div class="modal-actions">
-            <button id="modalSave" class="btn btn-primary">SAVE</button>
-            <button id="modalCancel" class="btn btn-ghost">CANCEL</button>
-          </div>
-
-          <div id="modalError" class="error" style="display:none;"></div>
+    <!-- WEB -->
+    <section class="panel panel-web">
+      <div class="panel-header">
+        <div class="panel-title">WEB</div>
+        <div class="panel-actions">
+          <button id="openGraphBtn" class="btn btn-ghost">GRAPH</button>
+          <button id="expandGraphBtn" class="btn btn-ghost">EXPAND</button>
         </div>
+      </div>
+
+      <div class="panel-body">
+        <div id="webGroups" class="web-groups"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- GRAPH DRAWER -->
+  <aside id="graphDrawer" class="drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="drawer-title">KNOWLEDGE GRAPH</div>
+      <div class="drawer-actions">
+        <button id="drawerExpandBtn" class="btn btn-ghost">EXPAND</button>
+        <button id="drawerCloseBtn" class="btn btn-ghost">CLOSE</button>
       </div>
     </div>
 
-    <script src="./dashboard.js"></script>
-  </body>
+    <div class="drawer-body">
+      <div class="graph-toolbar">
+        <button id="graphFitBtn" class="btn btn-ghost">FIT</button>
+        <button id="graphResetBtn" class="btn btn-ghost">RESET</button>
+        <input id="graphSearch" class="graph-search" type="text" placeholder="Search nodes…" />
+      </div>
+
+      <div class="graph-wrap">
+        <svg id="graphSvg" class="graph"></svg>
+      </div>
+
+      <div id="graphDetails" class="graph-details">
+        <div class="graph-details-title">Select a node</div>
+        <div class="graph-details-body">Click a category or an entry to view details.</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- GRAPH MODAL (EXPANDED) -->
+  <div id="graphModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-surface">
+      <div class="modal-header">
+        <div class="modal-title">KNOWLEDGE GRAPH — EXPANDED</div>
+        <div class="modal-actions">
+          <button id="modalFitBtn" class="btn btn-ghost">FIT</button>
+          <button id="modalCloseBtn" class="btn btn-ghost">CLOSE</button>
+        </div>
+      </div>
+
+      <div class="modal-body">
+        <svg id="graphSvgModal" class="graph graph--modal"></svg>
+        <div id="graphDetailsModal" class="graph-details graph-details--modal">
+          <div class="graph-details-title">Select a node</div>
+          <div class="graph-details-body">Click a category or an entry to view details.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./dashboard.js"></script>
+</body>
 </html>
