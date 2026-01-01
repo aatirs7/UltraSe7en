@@ -1,4 +1,3 @@
-
 export default async (req) => {
   if (req.method !== "POST") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -13,22 +12,21 @@ export default async (req) => {
       });
     }
 
-    // Use provided date from client (so “today” matches your timezone context),
-    // fallback to server date.
-    const today = (dateISO && /^\d{4}-\d{2}-\d{2}$/.test(dateISO))
-      ? dateISO
-      : new Date().toISOString().slice(0, 10);
+    const today =
+      (dateISO && /^\d{4}-\d{2}-\d{2}$/.test(dateISO))
+        ? dateISO
+        : new Date().toISOString().slice(0, 10);
 
     const system = `
 You are UltraSe7en's command parser.
-Convert the user's message into STRICT JSON only (no markdown, no extra text).
+Return STRICT JSON only (no markdown, no extra text).
 Rules:
 - date must be "${today}" unless the user explicitly references another date.
 - Keep summary short.
 - items is an array of structured actions.
 Allowed item types: "project", "habit", "goal", "note", "task".
 If unsure, use type "note".
-For habits/goals, use count or minutes when possible.
+Prefer numeric minutes/count where possible.
 JSON schema:
 {
   "date": "YYYY-MM-DD",
@@ -72,12 +70,10 @@ JSON schema:
     const data = await r.json();
     const content = data?.choices?.[0]?.message?.content ?? "";
 
-    // Parse JSON safely
     let parsed;
     try {
       parsed = JSON.parse(content);
     } catch {
-      // If model returns stray text, fail with useful debug
       return new Response(JSON.stringify({
         error: "Model did not return valid JSON",
         raw: content
