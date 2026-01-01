@@ -1,734 +1,149 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UltraSe7en — Dashboard</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UltraSe7en — Dashboard</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
 
-  <!-- Graph library (Obsidian-like web) -->
-  <script src="https://unpkg.com/force-graph"></script>
+    <link rel="stylesheet" href="./dashboard.css" />
+  </head>
 
-  <style>
-    :root{
-      --bg:#050607;
-      --panel: rgba(255,255,255,0.05);
-      --panel2: rgba(255,255,255,0.03);
-      --text: rgba(255,255,255,0.92);
-      --muted: rgba(255,255,255,0.55);
-      --line: rgba(255,255,255,0.10);
-      --violet: rgba(167,112,255,0.30);
-      --violet2: rgba(185,150,255,0.85);
-    }
+  <body>
+    <div class="bg"></div>
 
-    *{ box-sizing:border-box; margin:0; padding:0; }
-    html, body{ height:100%; }
-    body{
-      background:
-        radial-gradient(1100px 700px at 50% 20%, rgba(167,112,255,0.07), rgba(0,0,0,0) 65%),
-        radial-gradient(1200px 900px at 50% 50%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.85) 100%),
-        linear-gradient(180deg, #050607 0%, #020304 100%);
-      font-family: "Space Grotesk", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color: var(--text);
-    }
+    <header class="topbar">
+      <div class="brand">ULTRASE7EN — DASHBOARD</div>
+      <div class="topbar-right">
+        <div id="todayDate" class="date-pill">—</div>
+      </div>
+    </header>
 
-    .wrap{
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 42px 22px 80px;
-    }
-
-    .top{
-      display:flex;
-      align-items:flex-end;
-      justify-content:space-between;
-      gap:16px;
-      margin-bottom: 18px;
-    }
-
-    .title{
-      letter-spacing: 0.35em;
-      text-transform: uppercase;
-      font-weight: 400;
-      font-size: 14px;
-      color: var(--muted);
-    }
-
-    .date{
-      font-size: 12px;
-      letter-spacing: 0.25em;
-      color: var(--muted);
-      text-transform: uppercase;
-    }
-
-    /* Command | Today | Graph */
-    .grid{
-      display:grid;
-      grid-template-columns: 1.15fr 0.95fr 360px;
-      gap: 16px;
-      margin-top: 18px;
-      align-items: start;
-    }
-
-    @media (max-width: 1100px){
-      .grid{ grid-template-columns: 1fr; }
-    }
-
-    .panel{
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, var(--panel), var(--panel2));
-      border-radius: 18px;
-      padding: 18px;
-      min-height: 220px;
-    }
-
-    .panel h2{
-      font-size: 12px;
-      font-weight: 500;
-      letter-spacing: 0.35em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.70);
-      margin-bottom: 14px;
-    }
-
-    textarea{
-      width:100%;
-      min-height: 120px;
-      resize: vertical;
-      background: rgba(0,0,0,0.20);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 14px;
-      color: var(--text);
-      outline:none;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-    textarea:focus{
-      border-color: rgba(185,150,255,0.35);
-      box-shadow: 0 0 0 1px rgba(185,150,255,0.12), 0 0 40px rgba(167,112,255,0.10);
-    }
-
-    .row{
-      display:flex;
-      gap: 10px;
-      margin-top: 12px;
-      align-items:center;
-      justify-content:space-between;
-    }
-
-    .btn{
-      border: none;
-      background: transparent;
-      color: rgba(255,255,255,0.82);
-      letter-spacing: 0.35em;
-      text-transform: uppercase;
-      font-size: 12px;
-      padding: 10px 18px;
-      border-radius: 999px;
-      cursor:pointer;
-      transition: box-shadow 250ms ease, color 250ms ease, transform 250ms ease;
-    }
-    .btn:hover{
-      color: rgba(255,255,255,0.95);
-      box-shadow:
-        0 0 0 1px rgba(185,150,255,0.18),
-        0 0 28px rgba(167,112,255,0.26),
-        0 0 80px rgba(167,112,255,0.14);
-      transform: translateY(-1px);
-    }
-    .btn:disabled{
-      opacity:0.4;
-      cursor:not-allowed;
-      box-shadow:none;
-      transform:none;
-    }
-
-    .hint{
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.4;
-      max-width: 520px;
-    }
-
-    .list{
-      display:flex;
-      flex-direction:column;
-      gap: 10px;
-    }
-
-    .card{
-      border: 1px solid var(--line);
-      background: rgba(0,0,0,0.18);
-      border-radius: 14px;
-      padding: 12px 12px;
-    }
-
-    .card-top{
-      display:flex;
-      justify-content:space-between;
-      gap: 10px;
-      align-items:flex-start;
-      margin-bottom: 8px;
-    }
-
-    .summary{
-      font-size: 13px;
-      color: rgba(255,255,255,0.88);
-    }
-
-    .meta{
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .items{
-      margin-top: 8px;
-      display:flex;
-      flex-direction:column;
-      gap: 6px;
-      color: rgba(255,255,255,0.72);
-      font-size: 13px;
-    }
-
-    .pill{
-      display:inline-block;
-      font-size: 10px;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(185,150,255,0.22);
-      color: rgba(185,150,255,0.85);
-      margin-right: 8px;
-    }
-
-    .card-actions{
-      display:flex;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .mini{
-      font-size: 11px;
-      letter-spacing: 0.28em;
-      text-transform: uppercase;
-      padding: 8px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      background: transparent;
-      color: rgba(255,255,255,0.74);
-      cursor:pointer;
-    }
-    .mini:hover{
-      border-color: rgba(185,150,255,0.35);
-      box-shadow: 0 0 0 1px rgba(185,150,255,0.10), 0 0 30px rgba(167,112,255,0.10);
-    }
-
-    .editor{
-      margin-top: 10px;
-      display:none;
-      gap: 10px;
-    }
-    .editor textarea{
-      min-height: 90px;
-    }
-    .editor.show{
-      display:grid;
-    }
-
-    .error{
-      margin-top: 10px;
-      color: rgba(255,130,130,0.95);
-      font-size: 12px;
-      line-height: 1.4;
-      white-space: pre-wrap;
-    }
-
-    /* Expanded graph mode */
-    body.graph-expanded .grid{
-      grid-template-columns: 420px 420px 1fr;
-    }
-    body.graph-expanded #graphWrap{
-      height: 680px !important;
-    }
-  </style>
-</head>
-
-<body>
-  <div class="wrap">
-    <div class="top">
-      <div class="title">UltraSe7en — Dashboard</div>
-      <div class="date" id="todayLabel"></div>
-    </div>
-
-    <div class="grid">
+    <main class="grid">
       <!-- COMMAND -->
-      <section class="panel">
-        <h2>Command</h2>
-        <textarea id="cmd" placeholder="Type what you did. Example:
-Today I worked on enrichment for 90 minutes, did treadmill, and noted DNS issues in containers. Add it to today."></textarea>
-        <div class="row">
-          <div class="hint">
-            Auto-add is enabled. You can edit entries after if the parse is wrong.
-          </div>
-          <button class="btn" id="submitBtn">Submit</button>
+      <section class="panel panel-command">
+        <div class="panel-head">
+          <div class="panel-title">COMMAND</div>
         </div>
-        <div class="error" id="errorBox" style="display:none;"></div>
+
+        <div class="panel-body">
+          <label class="helper">
+            Format: <span class="mono">category: your text</span>
+            <span class="muted">(category can include spaces)</span><br />
+            New category: <span class="mono">NC: Category Name</span><br />
+            Autocomplete: <span class="mono">Tab</span> completes • <span class="mono">↑/↓</span> cycles
+          </label>
+
+          <div class="autocomplete-wrap">
+            <textarea
+              id="entryInput"
+              class="input"
+              rows="5"
+              spellcheck="false"
+              placeholder="Examples:
+note: fixed DNS issues in containers
+project update: built the node feature
+to do: refactor dashboard layout
+NC: Enrichment Projects"
+            ></textarea>
+
+            <div id="acBox" class="ac-box" style="display:none;">
+              <div class="ac-hint">TAB to complete • ↑/↓ to cycle</div>
+              <div id="acList" class="ac-list"></div>
+            </div>
+          </div>
+
+          <div class="cmd-footer">
+            <div class="fineprint">
+              SUBMIT saves to <b>TODAY</b>. Promote to <b>WEB</b> manually, or it will auto-promote on the next day.
+            </div>
+            <button id="submitBtn" class="btn btn-primary">SUBMIT</button>
+          </div>
+
+          <div id="cmdError" class="error" style="display:none;"></div>
+          <div id="toast" class="toast" style="display:none;"></div>
+        </div>
       </section>
 
       <!-- TODAY -->
-      <section class="panel">
-        <h2>Today</h2>
-        <div class="list" id="todayList"></div>
-      </section>
-
-      <!-- KNOWLEDGE GRAPH -->
-      <section class="panel" id="graphPanel" style="position:relative; overflow:hidden;">
-        <h2 style="display:flex; align-items:center; justify-content:space-between;">
-          Knowledge
-          <button class="mini" id="graphToggle">Expand</button>
-        </h2>
-
-        <div id="graphWrap" style="height: 520px; border:1px solid var(--line); border-radius:14px; overflow:hidden; background: rgba(0,0,0,0.15);"></div>
-
-        <!-- Side Drawer -->
-        <div id="drawer" style="
-          position:absolute; top:52px; right:18px; width: 320px; height: calc(100% - 70px);
-          border:1px solid var(--line); border-radius:14px;
-          background: rgba(0,0,0,0.55);
-          backdrop-filter: blur(10px);
-          padding: 14px;
-          transform: translateX(110%);
-          transition: transform 220ms ease;
-        ">
-          <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
-            <div id="drawerTitle" style="font-size:12px; letter-spacing:0.28em; text-transform:uppercase; color:rgba(255,255,255,0.82);">
-              Node
-            </div>
-            <div style="display:flex; gap:8px;">
-              <button class="mini" id="drawerExpand">Expand</button>
-              <button class="mini" id="drawerClose">Close</button>
-            </div>
-          </div>
-
-          <div id="drawerMeta" style="margin-top:10px; color: var(--muted); font-size: 12px; line-height:1.5;"></div>
-
-          <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:12px;">
-            <div style="font-size:11px; letter-spacing:0.25em; text-transform:uppercase; color:rgba(255,255,255,0.62); margin-bottom:10px;">
-              Related Today Entries
-            </div>
-            <div id="drawerList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      <section class="panel panel-today">
+        <div class="panel-head panel-head-row">
+          <div class="panel-title">TODAY</div>
+          <div class="head-actions">
+            <button id="addAllBtn" class="btn btn-ghost">ADD ALL TO WEB</button>
+            <button id="clearTodayBtn" class="btn btn-ghost danger">CLEAR TODAY</button>
           </div>
         </div>
+
+        <div class="panel-body">
+          <div id="todayEmpty" class="empty">No entries yet.</div>
+          <div id="todayList" class="list"></div>
+        </div>
       </section>
+
+      <!-- WEB / KNOWLEDGE -->
+      <section class="panel panel-knowledge">
+        <div class="panel-head panel-head-row">
+          <div class="panel-title">WEB</div>
+          <div class="head-actions">
+            <button id="expandBtn" class="btn btn-ghost">EXPAND</button>
+          </div>
+        </div>
+
+        <div class="panel-body panel-body-tight">
+          <div id="knowledgeEmpty" class="empty">No nodes yet.</div>
+          <div id="knowledgeGroups" class="knowledge"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- WEB DRAWER -->
+    <aside id="drawer" class="drawer" aria-hidden="true">
+      <div class="drawer-backdrop" id="drawerBackdrop"></div>
+
+      <div class="drawer-panel">
+        <div class="drawer-head">
+          <div class="drawer-title">WEB</div>
+          <button id="drawerClose" class="btn btn-ghost">CLOSE</button>
+        </div>
+
+        <div class="drawer-body">
+          <div id="drawerKnowledgeEmpty" class="empty">No nodes yet.</div>
+          <div id="drawerKnowledgeGroups" class="knowledge"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- EDIT MODAL -->
+    <div id="modal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" id="modalBackdrop"></div>
+
+      <div class="modal-panel">
+        <div class="modal-head">
+          <div class="modal-title">EDIT ENTRY</div>
+          <button id="modalClose" class="btn btn-ghost">CLOSE</button>
+        </div>
+
+        <div class="modal-body">
+          <label class="helper">Format: <span class="mono">category: text</span></label>
+          <textarea id="modalText" class="input" rows="5" spellcheck="false"></textarea>
+
+          <div class="modal-actions">
+            <button id="modalSave" class="btn btn-primary">SAVE</button>
+            <button id="modalCancel" class="btn btn-ghost">CANCEL</button>
+          </div>
+
+          <div id="modalError" class="error" style="display:none;"></div>
+        </div>
+      </div>
     </div>
-  </div>
 
-<script>
-  const STORAGE_KEY = "ultrase7en.dailyLog.v0";
-
-  function isoTodayLocal() {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  function loadAll() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-    catch { return []; }
-  }
-
-  function saveAll(rows) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
-  }
-
-  function uid() {
-    return crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
-  }
-
-  function fmtTime(ts) {
-    const d = new Date(ts);
-    let h = d.getHours();
-    const m = String(d.getMinutes()).padStart(2,"0");
-    const ampm = h >= 12 ? "PM" : "AM";
-    h = h % 12; if (h === 0) h = 12;
-    return `${h}:${m} ${ampm}`;
-  }
-
-  function escapeHtml(s){
-    return String(s)
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  function renderItem(it){
-    const t = (it?.type || "note").toLowerCase();
-    const pill = `<span class="pill">${escapeHtml(t)}</span>`;
-
-    if (t === "project") {
-      const name = it.name ? `<strong>${escapeHtml(it.name)}</strong>` : "Project";
-      const mins = (it.minutes && Number(it.minutes) > 0) ? ` — ${Number(it.minutes)} min` : "";
-      const detail = it.detail ? ` — ${escapeHtml(it.detail)}` : "";
-      return `${pill}${name}${mins}${detail}`;
-    }
-    if (t === "habit") {
-      const name = it.name ? `<strong>${escapeHtml(it.name)}</strong>` : "Habit";
-      const count = (it.count != null) ? ` — +${escapeHtml(String(it.count))}` : "";
-      return `${pill}${name}${count}`;
-    }
-    if (t === "goal") {
-      const name = it.name ? `<strong>${escapeHtml(it.name)}</strong>` : "Goal";
-      const delta = it.delta ? ` — ${escapeHtml(it.delta)}` : "";
-      return `${pill}${name}${delta}`;
-    }
-    if (t === "task") {
-      const detail = it.detail ? escapeHtml(it.detail) : "Task";
-      return `${pill}${detail}`;
-    }
-    return `${pill}${escapeHtml(it.detail || "Note")}`;
-  }
-
-  function setError(msg){
-    const box = document.getElementById("errorBox");
-    if (!msg) { box.style.display = "none"; box.textContent = ""; return; }
-    box.style.display = "block";
-    box.textContent = msg;
-  }
-
-  async function callParse(text){
-    const res = await fetch("/.netlify/functions/command", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, dateISO: isoTodayLocal() })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error ? `${data.error}\n${data.details || ""}` : "Parse failed");
-    return data;
-  }
-
-  function renderToday() {
-    const today = isoTodayLocal();
-    document.getElementById("todayLabel").textContent = today;
-
-    const all = loadAll();
-    const todays = all.filter(x => x.date === today).sort((a,b) => b.createdAt - a.createdAt);
-
-    const list = document.getElementById("todayList");
-    list.innerHTML = "";
-
-    if (todays.length === 0) {
-      list.innerHTML = `<div style="color: rgba(255,255,255,0.45); font-size: 13px;">No entries yet.</div>`;
-      return;
-    }
-
-    for (const entry of todays) {
-      const card = document.createElement("div");
-      card.className = "card";
-
-      const summary = entry.parsed?.summary || "Entry";
-      const items = entry.parsed?.items || [];
-
-      card.innerHTML = `
-        <div class="card-top">
-          <div class="summary">${escapeHtml(summary)}</div>
-          <div class="meta">${fmtTime(entry.createdAt)}</div>
-        </div>
-
-        <div class="items">
-          ${items.map(it => `<div>${renderItem(it)}</div>`).join("")}
-        </div>
-
-        <div class="card-actions">
-          <button class="mini" data-action="edit" data-id="${entry.id}">Edit</button>
-          <button class="mini" data-action="delete" data-id="${entry.id}">Delete</button>
-        </div>
-
-        <div class="editor" id="editor-${entry.id}">
-          <textarea id="editraw-${entry.id}">${escapeHtml(entry.rawText)}</textarea>
-          <div style="display:flex; gap:8px; justify-content:flex-end;">
-            <button class="mini" data-action="cancel" data-id="${entry.id}">Cancel</button>
-            <button class="mini" data-action="reparse" data-id="${entry.id}">Re-Parse</button>
-            <button class="mini" data-action="saveRaw" data-id="${entry.id}">Save Text Only</button>
-          </div>
-          <div class="hint" style="margin-top:6px;">
-            “Re-Parse” re-runs AI on edited text and overwrites structured items.
-            “Save Text Only” keeps your edit but leaves the old parse.
-          </div>
-        </div>
-      `;
-
-      list.appendChild(card);
-    }
-  }
-
-  document.getElementById("submitBtn").addEventListener("click", async () => {
-    setError("");
-    const btn = document.getElementById("submitBtn");
-    const input = document.getElementById("cmd");
-    const text = input.value.trim();
-    if (!text) return;
-
-    btn.disabled = true;
-    try {
-      const parsed = await callParse(text);
-
-      const entry = {
-        id: uid(),
-        date: parsed.date || isoTodayLocal(),
-        createdAt: Date.now(),
-        rawText: text,
-        parsed
-      };
-
-      const all = loadAll();
-      all.push(entry);
-      saveAll(all);
-
-      input.value = "";
-      renderToday();
-      renderGraph(); // keep graph in sync
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  document.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button");
-    if (!btn) return;
-
-    const action = btn.dataset.action;
-    const id = btn.dataset.id;
-    if (!action || !id) return;
-
-    const all = loadAll();
-    const idx = all.findIndex(x => x.id === id);
-    if (idx === -1) return;
-
-    if (action === "delete") {
-      all.splice(idx, 1);
-      saveAll(all);
-      renderToday();
-      renderGraph();
-      return;
-    }
-
-    const editor = document.getElementById(`editor-${id}`);
-
-    if (action === "edit") {
-      editor.classList.add("show");
-      return;
-    }
-
-    if (action === "cancel") {
-      editor.classList.remove("show");
-      return;
-    }
-
-    if (action === "saveRaw") {
-      const t = document.getElementById(`editraw-${id}`).value.trim();
-      all[idx].rawText = t;
-      saveAll(all);
-      editor.classList.remove("show");
-      renderToday();
-      renderGraph();
-      return;
-    }
-
-    if (action === "reparse") {
-      setError("");
-      const t = document.getElementById(`editraw-${id}`).value.trim();
-      btn.disabled = true;
-      try {
-        const parsed = await callParse(t);
-        all[idx].rawText = t;
-        all[idx].parsed = parsed;
-        saveAll(all);
-        editor.classList.remove("show");
-        renderToday();
-        renderGraph();
-      } catch (err) {
-        setError(String(err));
-      } finally {
-        btn.disabled = false;
-      }
-      return;
-    }
-  });
-
-  /* ------------------ GRAPH (Obsidian-like web) ------------------ */
-  let fg;
-  let lastGraphData = { nodes: [], links: [] };
-
-  function buildGraphDataFromEntries(entries) {
-    const nodes = new Map();
-    const links = [];
-
-    function upsertNode(type, name) {
-      const safeName = String(name || "").trim() || type;
-      const key = `${type}:${safeName}`.toLowerCase();
-      if (!nodes.has(key)) nodes.set(key, { id: key, type, name: safeName, count: 0 });
-      const n = nodes.get(key);
-      n.count += 1;
-      return n;
-    }
-
-    function upsertLogNode(entry) {
-      const key = `log:${entry.id}`;
-      if (!nodes.has(key)) {
-        nodes.set(key, {
-          id: key,
-          type: "log",
-          name: entry.parsed?.summary || "Log",
-          entryId: entry.id,
-          date: entry.date,
-          createdAt: entry.createdAt
-        });
-      }
-      return nodes.get(key);
-    }
-
-    for (const entry of entries) {
-      const logNode = upsertLogNode(entry);
-      const items = entry.parsed?.items || [];
-      const referenced = [];
-
-      for (const it of items) {
-        const t = (it?.type || "note").toLowerCase();
-
-        if (t === "project") referenced.push(upsertNode("project", it.name || "Project"));
-        else if (t === "habit") referenced.push(upsertNode("habit", it.name || "Habit"));
-        else if (t === "goal") referenced.push(upsertNode("goal", it.name || "Goal"));
-        else if (t === "task") referenced.push(upsertNode("task", it.detail || "Task"));
-        else {
-          // Notes explode quickly; keep them compact in v0
-          const name = String(it.detail || "Note").slice(0, 42);
-          referenced.push(upsertNode("note", name));
-        }
-      }
-
-      for (const n of referenced) {
-        links.push({ source: logNode.id, target: n.id });
-      }
-
-      // Link items together if they appeared in the same entry
-      for (let i = 0; i < referenced.length; i++) {
-        for (let j = i + 1; j < referenced.length; j++) {
-          links.push({ source: referenced[i].id, target: referenced[j].id });
-        }
-      }
-    }
-
-    return { nodes: Array.from(nodes.values()), links };
-  }
-
-  function renderGraph() {
-    const all = loadAll();
-    const today = isoTodayLocal();
-    const todays = all.filter(x => x.date === today);
-
-    lastGraphData = buildGraphDataFromEntries(todays);
-
-    const wrap = document.getElementById("graphWrap");
-    wrap.innerHTML = "";
-
-    if (lastGraphData.nodes.length === 0) {
-      wrap.innerHTML = `<div style="height:100%; display:grid; place-items:center; color: rgba(255,255,255,0.45); font-size: 13px;">
-        No nodes yet.
-      </div>`;
-      return;
-    }
-
-    fg = ForceGraph()(wrap)
-      .graphData(lastGraphData)
-      .nodeLabel(n => `${String(n.type).toUpperCase()}: ${n.name}`)
-      .nodeRelSize(5)
-      .nodeVal(n => (n.type === "log" ? 2 : Math.min(8, 2 + (n.count || 0))))
-      .onNodeClick((node) => openDrawerForNode(node, todays))
-      .cooldownTicks(80);
-  }
-
-  function openDrawerForNode(node, todaysEntries) {
-    const drawer = document.getElementById("drawer");
-    const title = document.getElementById("drawerTitle");
-    const meta = document.getElementById("drawerMeta");
-    const list = document.getElementById("drawerList");
-
-    title.textContent = `${String(node.type).toUpperCase()} — ${node.name}`;
-
-    if (node.type === "log") {
-      meta.innerHTML = `Log entry<br/>${new Date(node.createdAt).toLocaleString()}`;
-    } else {
-      meta.innerHTML = `Occurrences today: <span style="color: var(--violet2);">${node.count || 0}</span>`;
-    }
-
-    const relatedLogs = [];
-    for (const link of (lastGraphData.links || [])) {
-      if (link.target === node.id && String(link.source).startsWith("log:")) {
-        relatedLogs.push(String(link.source).replace("log:", ""));
-      }
-      if (link.source === node.id && String(link.target).startsWith("log:")) {
-        relatedLogs.push(String(link.target).replace("log:", ""));
-      }
-    }
-
-    const unique = [...new Set(relatedLogs)];
-    const relatedEntries = todaysEntries.filter(e => unique.includes(e.id)).slice(0, 8);
-
-    list.innerHTML = "";
-    if (relatedEntries.length === 0) {
-      list.innerHTML = `<div style="color: rgba(255,255,255,0.45); font-size: 13px;">No related entries.</div>`;
-    } else {
-      for (const e of relatedEntries) {
-        const div = document.createElement("div");
-        div.style.border = "1px solid var(--line)";
-        div.style.borderRadius = "12px";
-        div.style.padding = "10px";
-        div.style.background = "rgba(0,0,0,0.22)";
-        div.innerHTML = `
-          <div style="font-size:12px; color: rgba(255,255,255,0.86); margin-bottom:6px;">
-            ${escapeHtml(e.parsed?.summary || "Entry")}
-          </div>
-          <div style="font-size:11px; color: var(--muted);">
-            ${escapeHtml(e.rawText.slice(0, 120))}${e.rawText.length > 120 ? "…" : ""}
-          </div>
-        `;
-        list.appendChild(div);
-      }
-    }
-
-    drawer.style.transform = "translateX(0)";
-  }
-
-  // Drawer controls
-  document.getElementById("drawerClose").addEventListener("click", () => {
-    document.getElementById("drawer").style.transform = "translateX(110%)";
-  });
-
-  document.getElementById("drawerExpand").addEventListener("click", () => {
-    document.body.classList.add("graph-expanded");
-  });
-
-  document.getElementById("graphToggle").addEventListener("click", () => {
-    document.body.classList.toggle("graph-expanded");
-  });
-
-  // Initial render
-  renderToday();
-  renderGraph();
-</script>
-</body>
+    <script src="./dashboard.js"></script>
+  </body>
 </html>
