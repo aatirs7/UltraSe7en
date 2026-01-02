@@ -138,27 +138,26 @@ body{
   animation-delay: 1.85s;
 }
 
-.enter-btn{
-  display: inline-block;
-  padding: 12px 64px;
-  font-size: 12px;
-  letter-spacing: 0.45em;
-  text-transform: uppercase;
+.enter-btn {
+  margin-top: 3rem;
+  padding: 14px 36px;
+  border-radius: 999px;            /* fully pill */
+  border: none;                    /* remove outline */
+  background: rgba(255, 255, 255, 0.06);
+  color: #eaeaea;
+  font-size: 0.75rem;
+  letter-spacing: 0.35em;
   text-decoration: none;
-  border: none;
-  background: transparent;
-  color: rgba(255,255,255,0.78);
-  transition: color 300ms ease, box-shadow 300ms ease, transform 300ms ease;
+  backdrop-filter: blur(6px);
+  transition: all 0.3s ease;
 }
 
-.enter-btn:hover{
-  color: rgba(255,255,255,0.95);
-  box-shadow:
-    0 0 0 1px rgba(185,150,255,0.18),
-    0 0 28px rgba(167,112,255,0.30),
-    0 0 80px rgba(167,112,255,0.16);
-  transform: translateY(-1px) scale(1.03);
+.enter-btn:hover {
+  background: rgba(160, 120, 255, 0.18);
+  color: #fff;
+  box-shadow: 0 0 24px rgba(160, 120, 255, 0.45);
 }
+
 
 .enter-btn:active{ transform: scale(0.98); }
 
