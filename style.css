@@ -140,27 +140,35 @@ body{
 
 .enter-btn {
   margin-top: 3rem;
-  padding: 14px 36px;
-  border-radius: 999px;            /* fully pill */
-  border: none;                    /* remove outline */
-  background: rgba(255, 255, 255, 0.06);
-  color: #eaeaea;
+  padding: 14px 38px;
+  border-radius: 999px;
+  border: none;
+  outline: none;
+
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+
   font-size: 0.75rem;
   letter-spacing: 0.35em;
   text-decoration: none;
+
   backdrop-filter: blur(6px);
-  transition: all 0.3s ease;
+  transition: background 0.25s ease,
+              box-shadow 0.25s ease,
+              transform 0.2s ease,
+              color 0.25s ease;
 }
 
 .enter-btn:hover {
-  background: rgba(160, 120, 255, 0.18);
-  color: #fff;
-  box-shadow: 0 0 24px rgba(160, 120, 255, 0.45);
+  background: rgba(167, 139, 250, 0.22);
+  box-shadow: 0 0 28px rgba(167, 139, 250, 0.55);
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
-
-.enter-btn:active{ transform: scale(0.98); }
-
+.enter-btn:active {
+  transform: translateY(0);
+}
 @media (max-width: 520px){
   .title{ letter-spacing: 0.32em; }
 }

@@ -33,6 +33,7 @@ body{
   overflow-x:hidden;
 }
 
+
 .bg{
   position:fixed;
   inset:0;
@@ -77,14 +78,17 @@ body{
   align-items:start;
 }
 
-.panel{
-  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(var(--blur));
-  overflow:hidden;
+.panel {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.04)
+  );
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  backdrop-filter: blur(18px);
 }
+
 
 .panel-header{
   display:flex;
@@ -508,4 +512,18 @@ textarea::placeholder{
   .grid{grid-template-columns:1fr; padding: 12px 14px 22px}
   .drawer{width:100%; right:-100%}
   .modal-body{grid-template-columns:1fr}
+}
+body {
+  color: rgba(240, 240, 240, 0.88);
+}
+
+.panel-title {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.hint,
+.micro,
+.empty,
+.time {
+  color: rgba(220, 220, 220, 0.6);
 }

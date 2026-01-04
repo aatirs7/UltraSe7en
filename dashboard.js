@@ -707,12 +707,13 @@ function createGraphSystem({ svgEl, detailsEl }){
     const rect = svgEl.getBoundingClientRect();
     svg.attr("width", rect.width).attr("height", rect.height);
 
-    const links = linkG.selectAll("line")
-      .data(data.links, d => `${d.source}->${d.target}`)
-      .enter()
-      .append("line")
-      .attr("stroke", palette.link)
-      .attr("stroke-width", 1);
+  const links = linkG.selectAll("line")
+  .data(data.links, d => `${d.source}->${d.target}`)
+  .enter()
+  .append("line")
+  .attr("stroke", "rgba(255,255,255,0.32)")
+  .attr("stroke-width", 1.2);
+
 
     const nodes = nodeG.selectAll("g")
       .data(data.nodes, d => d.id)
@@ -720,12 +721,21 @@ function createGraphSystem({ svgEl, detailsEl }){
       .append("g")
       .attr("cursor", "pointer");
 
-    // circles
-    nodes.append("circle")
-      .attr("r", d => d.type === "category" ? 18 : 10)
-      .attr("fill", d => d.type === "category" ? palette.catFill : palette.entryFill)
-      .attr("stroke", d => d.type === "category" ? palette.catStroke : palette.entryStroke)
-      .attr("stroke-width", d => d.type === "category" ? 2 : 1);
+    // circles (improved contrast)
+nodes.append("circle")
+  .attr("r", d => d.type === "category" ? 20 : 12)
+  .attr("fill", d =>
+    d.type === "category"
+      ? "rgba(167,139,250,0.35)"
+      : "rgba(255,255,255,0.22)"
+  )
+  .attr("stroke", d =>
+    d.type === "category"
+      ? "rgba(200,175,255,0.95)"
+      : "rgba(255,255,255,0.65)"
+  )
+  .attr("stroke-width", d => d.type === "category" ? 2.4 : 1.4);
+
 
     // labels
     nodes.append("text")
@@ -752,6 +762,19 @@ function createGraphSystem({ svgEl, detailsEl }){
           d.fx = null; d.fy = null;
         })
     );
+    // hover glow
+nodes
+  .on("mouseenter", function () {
+    d3.select(this).select("circle")
+      .attr("stroke-width", 3)
+      .attr("filter", "drop-shadow(0 0 10px rgba(190,160,255,0.9))");
+  })
+  .on("mouseleave", function (event, d) {
+    d3.select(this).select("circle")
+      .attr("stroke-width", d.type === "category" ? 2.4 : 1.4)
+      .attr("filter", null);
+  });
+
 
     // click
     nodes.on("click", (event, d) => {
@@ -759,8 +782,17 @@ function createGraphSystem({ svgEl, detailsEl }){
 
       // set active styles
       nodeG.selectAll("circle")
-        .attr("stroke", n => n.id === d.id ? palette.active : (n.type === "category" ? palette.catStroke : palette.entryStroke))
-        .attr("stroke-width", n => n.id === d.id ? 2.5 : (n.type === "category" ? 2 : 1));
+        .attr("stroke", n => {
+  if(n.id === d.id) return "rgba(190,160,255,0.95)";
+  return n.type === "category"
+    ? "rgba(200,175,255,0.95)"
+    : "rgba(255,255,255,0.65)";
+})
+.attr("stroke-width", n => {
+  if(n.id === d.id) return 3;
+  return n.type === "category" ? 2.4 : 1.4;
+});
+
 
       if(d.type === "category"){
         const count = data.nodes.filter(x => x.type === "entry" && x.category === d.category).length;
@@ -780,8 +812,13 @@ function createGraphSystem({ svgEl, detailsEl }){
     // click background clears selection
     svg.on("click", () => {
       nodeG.selectAll("circle")
-        .attr("stroke", n => n.type === "category" ? palette.catStroke : palette.entryStroke)
-        .attr("stroke-width", n => n.type === "category" ? 2 : 1);
+        .attr("stroke", n =>
+  n.type === "category"
+    ? "rgba(200,175,255,0.95)"
+    : "rgba(255,255,255,0.65)"
+)
+.attr("stroke-width", n => n.type === "category" ? 2.4 : 1.4);
+
       setDetails("Select a node", "Click a category or an entry to view details.");
     });
 
