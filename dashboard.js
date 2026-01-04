@@ -93,8 +93,9 @@ function wireUI(){
   el("clearTodayBtn").addEventListener("click", () => clearToday());
 
   // IMPORTANT: GRAPH + EXPAND -> fullscreen modal (what you asked)
-  el("openGraphBtn").addEventListener("click", () => openModal());
-  el("expandGraphBtn").addEventListener("click", () => openModal());
+ el("openGraphBtn").addEventListener("click", () => openDrawer());  // GRAPH button
+el("expandGraphBtn").addEventListener("click", () => openModal()); // EXPAND button
+
 
   // drawer buttons still exist (optional)
   el("drawerCloseBtn").addEventListener("click", () => closeDrawer());
@@ -616,10 +617,11 @@ function createGraphSystem({ svgEl, detailsEl }){
   };
 
   function resize(){
-    const rect = svgEl.getBoundingClientRect();
-    svg.attr("width", rect.width).attr("height", rect.height);
-    sim?.alpha(0.35).restart();
-  }
+  const rect = svgEl.getBoundingClientRect();
+  svg.attr("width", rect.width).attr("height", rect.height);
+  sim?.alpha(0.6).restart();
+}
+
 
   function setDetails(title, body){
     const t = detailsEl.querySelector(".graph-details-title");
@@ -667,13 +669,20 @@ function createGraphSystem({ svgEl, detailsEl }){
       .attr("stroke-width", d => d.type === "hub" ? 2.8 : (d.type === "category" ? 2.4 : 1.4));
 
     nodes.append("text")
-      .text(d => (d.type === "category" || d.type === "hub") ? d.label : "")
-      .attr("x", d => (d.type === "category" || d.type === "hub") ? 28 : 14)
-      .attr("y", 4)
-      .attr("fill", "rgba(233,233,238,0.82)")
-      .attr("font-size", 11)
-      .attr("font-family", "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace")
-      .attr("letter-spacing", ".12em");
+  .text(d => (d.type === "category" || d.type === "hub") ? d.label : "")
+  .attr("x", d => (d.type === "category" || d.type === "hub") ? 28 : 14)
+  .attr("y", 4)
+  .attr("fill", "rgba(233,233,238,0.82)")
+  .attr("font-size", 11)
+  .attr("font-family", "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace")
+  .attr("letter-spacing", ".12em");
+
+  // Entry labels hidden until hover (less confusing)
+nodeG.selectAll("g").each(function(d){
+  if(d.type === "entry"){
+    d3.select(this).select("text").remove(); // ensure no label
+  }
+});
 
     // hover glow
     nodes.on("mouseenter", function(event, d){
@@ -759,22 +768,29 @@ function createGraphSystem({ svgEl, detailsEl }){
 
     // force sim tuned for connected backbone
     sim = d3.forceSimulation(data.nodes)
-      .force("link", d3.forceLink(data.links).id(d => d.id)
-        .distance(l => l.kind === "topic" ? 150 : 70)
-        .strength(l => l.kind === "topic" ? 0.35 : 0.72)
-      )
-      .force("charge", d3.forceManyBody().strength(-260))
-      .force("center", d3.forceCenter(rect.width / 2, rect.height / 2))
-      .force("collide", d3.forceCollide().radius(d => d.type === "hub" ? 34 : (d.type === "category" ? 26 : 16)))
-      .on("tick", () => {
-        links
-          .attr("x1", d => d.source.x)
-          .attr("y1", d => d.source.y)
-          .attr("x2", d => d.target.x)
-          .attr("y2", d => d.target.y);
+  .alpha(1)
+  .alphaDecay(0.01)        // slower decay = stays “alive” longer
+  .velocityDecay(0.22)     // slightly less damping for motion
+  .force("link", d3.forceLink(data.links).id(d => d.id)
+    .distance(l => l.kind === "topic" ? 150 : 70)
+    .strength(l => l.kind === "topic" ? 0.35 : 0.72)
+  )
+  .force("charge", d3.forceManyBody().strength(-260))
+  .force("center", d3.forceCenter(rect.width / 2, rect.height / 2))
+  .force("collide", d3.forceCollide().radius(d => d.type === "hub" ? 34 : (d.type === "category" ? 26 : 16)))
+  .on("tick", () => {
+    links
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
 
-        nodes.attr("transform", d => `translate(${d.x},${d.y})`);
-      });
+    nodes.attr("transform", d => `translate(${d.x},${d.y})`);
+  });
+
+// keep a tiny alpha target so it gently moves forever
+sim.alphaTarget(0.03);
+
 
     fit();
   }
