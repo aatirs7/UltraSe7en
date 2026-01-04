@@ -1,4 +1,4 @@
-/* UltraSe7en Dashboard (no AI) + Obsidian-style graph visualizer (D3) */
+/* UltraSe7en Dashboard (no AI) + Obsidian-style graph (D3) */
 
 const LS_KEYS = {
   categories: "ultrase7en_categories_v1",
@@ -7,33 +7,15 @@ const LS_KEYS = {
   lastDay: "ultrase7en_last_day_v1",
 };
 
-const DEFAULT_CATEGORIES = [
-  "note",
-  "project update",
-  "to do",
-  "goal",
-  "project",
-  "random",
-];
-
+const DEFAULT_CATEGORIES = ["note","project update","to do","goal","project","random"];
 const el = (id) => document.getElementById(id);
 
 const state = {
   categories: [],
   today: [],
   web: [],
-  autoSuggest: {
-    active: false,
-    list: [],
-    idx: 0,
-    mode: "category",
-  },
-  graph: {
-    drawer: null,
-    modal: null,
-    drawerGraph: null,
-    modalGraph: null,
-  },
+  autoSuggest: { active:false, list:[], idx:0 },
+  graph: { drawerGraph:null, modalGraph:null },
 };
 
 function pad2(n){ return String(n).padStart(2,"0"); }
@@ -49,40 +31,39 @@ function todayKey(d = new Date()){
 }
 
 function loadJSON(key, fallback){
-  try{
-    const raw = localStorage.getItem(key);
-    if(!raw) return fallback;
-    return JSON.parse(raw);
-  }catch{
-    return fallback;
-  }
+  try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
+  catch{ return fallback; }
 }
-function saveJSON(key, val){
-  localStorage.setItem(key, JSON.stringify(val));
+function saveJSON(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+function normalizeCategory(s){ return String(s||"").trim().toLowerCase(); }
+function displayCategory(s){ return String(s||"").trim().toUpperCase(); }
+function dedupe(arr){
+  const out = [];
+  const seen = new Set();
+  for(const x of arr){
+    const n = normalizeCategory(x);
+    if(!seen.has(n)){ seen.add(n); out.push(n); }
+  }
+  return out;
 }
 
-function normalizeCategory(s){
-  return String(s || "").trim().toLowerCase();
-}
-function displayCategory(s){
-  // render as uppercase label-like, but keep words
-  return String(s || "").trim().toUpperCase();
+function persist(){
+  saveJSON(LS_KEYS.categories, state.categories);
+  saveJSON(LS_KEYS.today, state.today);
+  saveJSON(LS_KEYS.web, state.web);
 }
 
 function boot(){
-  // date display
-  const d = new Date();
-  el("todayDate").textContent = todayKey(d);
+  el("todayDate").textContent = todayKey(new Date());
 
   state.categories = loadJSON(LS_KEYS.categories, DEFAULT_CATEGORIES);
   state.today = loadJSON(LS_KEYS.today, []);
   state.web = loadJSON(LS_KEYS.web, []);
 
-  // auto-promote if day changed
   const last = localStorage.getItem(LS_KEYS.lastDay);
   const nowDay = todayKey();
   if(last && last !== nowDay){
-    // promote everything in TODAY to WEB
     if(state.today.length){
       for(const item of state.today){
         if(!item.inWeb){
@@ -97,14 +78,8 @@ function boot(){
   localStorage.setItem(LS_KEYS.lastDay, nowDay);
 
   wireUI();
+  initGraphs();
   renderAll();
-  initGraphSystems();
-}
-
-function persist(){
-  saveJSON(LS_KEYS.categories, state.categories);
-  saveJSON(LS_KEYS.today, state.today);
-  saveJSON(LS_KEYS.web, state.web);
 }
 
 function wireUI(){
@@ -117,34 +92,34 @@ function wireUI(){
   el("addAllToWebBtn").addEventListener("click", () => addAllToWeb());
   el("clearTodayBtn").addEventListener("click", () => clearToday());
 
-  // graph controls
-  el("openGraphBtn").addEventListener("click", () => openDrawer());
+  // IMPORTANT: GRAPH + EXPAND -> fullscreen modal (what you asked)
+  el("openGraphBtn").addEventListener("click", () => openModal());
   el("expandGraphBtn").addEventListener("click", () => openModal());
 
+  // drawer buttons still exist (optional)
   el("drawerCloseBtn").addEventListener("click", () => closeDrawer());
   el("drawerExpandBtn").addEventListener("click", () => openModal());
 
   el("graphFitBtn").addEventListener("click", () => state.graph.drawerGraph?.fit());
   el("graphResetBtn").addEventListener("click", () => state.graph.drawerGraph?.reset());
-  el("graphSearch").addEventListener("input", (e) => {
-    state.graph.drawerGraph?.search(e.target.value);
-  });
+  el("graphSearch").addEventListener("input", (e) => state.graph.drawerGraph?.search(e.target.value));
 
   el("modalCloseBtn").addEventListener("click", () => closeModal());
   el("modalFitBtn").addEventListener("click", () => state.graph.modalGraph?.fit());
 
-  // close modal by clicking backdrop
   el("graphModal").addEventListener("click", (e) => {
     if(e.target === el("graphModal")) closeModal();
   });
 }
+
+/* -------- Input / Entries -------- */
 
 function handleSubmit(){
   const raw = el("commandInput").value || "";
   const text = raw.trim();
   if(!text) return;
 
-  // New category syntax: NC: Category Name
+  // NC: New Category
   const ncMatch = text.match(/^nc\s*:\s*(.+)$/i);
   if(ncMatch){
     const catName = ncMatch[1].trim();
@@ -157,10 +132,9 @@ function handleSubmit(){
     return;
   }
 
-  // Standard: category: message (category can include spaces)
+  // category: message
   const match = text.match(/^([^:]+)\s*:\s*([\s\S]+)$/);
   if(!match){
-    // If no prefix, treat as "note"
     addTodayItem("note", text);
   }else{
     const cat = match[1].trim();
@@ -188,7 +162,6 @@ function addTodayItem(category, message){
   const catNorm = normalizeCategory(category);
   if(!catNorm) return;
 
-  // auto-create category if unknown
   if(!state.categories.map(normalizeCategory).includes(catNorm)){
     state.categories.push(catNorm);
   }
@@ -196,7 +169,7 @@ function addTodayItem(category, message){
   const item = {
     id: crypto.randomUUID(),
     category: catNorm,
-    message: message,
+    message,
     createdAt: Date.now(),
     inWeb: false,
   };
@@ -235,10 +208,7 @@ function addAllToWeb(){
       changed = true;
     }
   }
-  if(changed){
-    persist();
-    renderAll();
-  }
+  if(changed){ persist(); renderAll(); }
 }
 
 function clearToday(){
@@ -265,64 +235,34 @@ function deleteToday(id){
   renderAll();
 }
 
-function dedupe(arr){
-  const out = [];
-  const seen = new Set();
-  for(const x of arr){
-    const n = normalizeCategory(x);
-    if(!seen.has(n)){
-      seen.add(n);
-      out.push(n);
-    }
-  }
-  return out;
-}
+/* -------- Autocomplete (CLI-like) -------- */
 
-/* -------- Autocomplete (CLI-like) --------
-   - When typing "no" -> suggests "note:"
-   - Up/Down cycles
-   - Tab completes the selected suggestion
-*/
 function handleInputChange(){
   const input = el("commandInput");
   const val = input.value;
 
-  // Only autocomplete if user is typing a prefix before ":" and hasn't typed ":" yet on the current line.
   const lines = val.split("\n");
   const current = lines[lines.length - 1];
 
-  // if line already contains ":" we don't autocomplete category
-  if(current.includes(":")){
-    hideAutocomplete();
-    return;
-  }
+  if(current.includes(":")){ hideAutocomplete(); return; }
 
   const typed = current.trim().toLowerCase();
-  if(!typed){
-    hideAutocomplete();
-    return;
-  }
+  if(!typed){ hideAutocomplete(); return; }
 
   const candidates = state.categories
     .map(normalizeCategory)
     .filter(c => c.startsWith(typed))
     .slice(0, 8);
 
-  if(!candidates.length){
-    hideAutocomplete();
-    return;
-  }
+  if(!candidates.length){ hideAutocomplete(); return; }
 
   state.autoSuggest.active = true;
   state.autoSuggest.list = candidates;
   state.autoSuggest.idx = Math.min(state.autoSuggest.idx, candidates.length - 1);
-
   renderAutocomplete();
 }
 
 function handleInputKeydown(e){
-  const input = el("commandInput");
-
   if(state.autoSuggest.active){
     if(e.key === "ArrowDown"){
       e.preventDefault();
@@ -347,7 +287,6 @@ function handleInputKeydown(e){
     }
   }
 
-  // Ctrl/Cmd + Enter submits
   if((e.ctrlKey || e.metaKey) && e.key === "Enter"){
     e.preventDefault();
     handleSubmit();
@@ -358,17 +297,12 @@ function applyAutocomplete(){
   const input = el("commandInput");
   const val = input.value;
   const lines = val.split("\n");
-  const current = lines[lines.length - 1];
 
   const pick = state.autoSuggest.list[state.autoSuggest.idx];
-  const completed = `${pick}: `;
-
-  // Replace current line with completed prefix
-  lines[lines.length - 1] = completed;
+  lines[lines.length - 1] = `${pick}: `;
   input.value = lines.join("\n");
-  hideAutocomplete();
 
-  // place cursor at end
+  hideAutocomplete();
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
 }
@@ -376,6 +310,7 @@ function applyAutocomplete(){
 function renderAutocomplete(){
   const box = el("autocomplete");
   box.innerHTML = "";
+
   state.autoSuggest.list.forEach((s, i) => {
     const div = document.createElement("div");
     div.className = "suggest" + (i === state.autoSuggest.idx ? " active" : "");
@@ -387,6 +322,7 @@ function renderAutocomplete(){
     });
     box.appendChild(div);
   });
+
   box.classList.remove("hidden");
 }
 
@@ -402,7 +338,7 @@ function hideAutocomplete(){
 function renderAll(){
   renderToday();
   renderWeb();
-  rebuildGraphs(); // keep graph in sync with web data
+  rebuildGraphs();
 }
 
 function renderToday(){
@@ -419,7 +355,6 @@ function renderToday(){
   for(const item of state.today){
     const card = document.createElement("div");
     card.className = "card";
-    card.dataset.todayId = item.id;
 
     const top = document.createElement("div");
     top.className = "card-top";
@@ -430,7 +365,6 @@ function renderToday(){
     const catPill = document.createElement("span");
     catPill.className = "pill purple";
     catPill.textContent = displayCategory(item.category);
-
     pills.appendChild(catPill);
 
     if(item.inWeb){
@@ -493,7 +427,6 @@ function renderWeb(){
 
     const group = document.createElement("div");
     group.className = "group";
-    group.dataset.category = cat;
 
     const head = document.createElement("div");
     head.className = "group-head";
@@ -516,41 +449,38 @@ function renderWeb(){
     const body = document.createElement("div");
     body.className = "group-body";
 
-    if(items.length){
-      for(const w of items.slice(0, 6)){
-        const item = document.createElement("div");
-        item.className = "web-item";
-        item.dataset.webId = w.id;
+    for(const w of items.slice(0, 6)){
+      const item = document.createElement("div");
+      item.className = "web-item";
+      item.dataset.webId = w.id;
 
-        const itTitle = document.createElement("div");
-        itTitle.className = "web-item-title";
+      const itTitle = document.createElement("div");
+      itTitle.className = "web-item-title";
 
-        const b = document.createElement("b");
-        b.textContent = w.title || "entry";
+      const b = document.createElement("b");
+      b.textContent = w.title || "entry";
 
-        const t = document.createElement("div");
-        t.className = "time";
-        t.textContent = formatTime(new Date(w.createdAt));
+      const t = document.createElement("div");
+      t.className = "time";
+      t.textContent = formatTime(new Date(w.createdAt));
 
-        itTitle.appendChild(b);
-        itTitle.appendChild(t);
+      itTitle.appendChild(b);
+      itTitle.appendChild(t);
 
-        const sub = document.createElement("div");
-        sub.className = "web-item-sub";
-        sub.textContent = (w.body || "").slice(0, 80);
+      const sub = document.createElement("div");
+      sub.className = "web-item-sub";
+      sub.textContent = (w.body || "").slice(0, 80);
 
-        item.appendChild(itTitle);
-        item.appendChild(sub);
+      item.appendChild(itTitle);
+      item.appendChild(sub);
 
-        item.addEventListener("click", () => {
-          // highlight + open graph + focus node
-          highlightWebItem(w.id);
-          openDrawer();
-          state.graph.drawerGraph?.focusNode(w.id);
-        });
+      item.addEventListener("click", () => {
+        highlightWebItem(w.id);
+        openModal();                 // fullscreen
+        state.graph.modalGraph?.focusNode(w.id);
+      });
 
-        body.appendChild(item);
-      }
+      body.appendChild(item);
     }
 
     group.appendChild(head);
@@ -569,17 +499,12 @@ function highlightWebItem(webId){
   }
 }
 
-/* -------- Graph (Obsidian-like) --------
-   - Category nodes + Entry nodes
-   - Edges: Category -> Entry
-   - Zoom/Pan, Drag, Click for details
-*/
+/* -------- Graph Modal/Drawer -------- */
 
 function openDrawer(){
   const dr = el("graphDrawer");
   dr.classList.add("open");
   dr.setAttribute("aria-hidden", "false");
-  // ensure graph sizes after drawer animation
   setTimeout(() => state.graph.drawerGraph?.resize(), 240);
 }
 function closeDrawer(){
@@ -587,12 +512,12 @@ function closeDrawer(){
   dr.classList.remove("open");
   dr.setAttribute("aria-hidden", "true");
 }
+
 function openModal(){
   const m = el("graphModal");
   m.classList.remove("hidden");
   m.setAttribute("aria-hidden", "false");
   setTimeout(() => state.graph.modalGraph?.resize(), 50);
-  // optional: also close drawer so you don't have both
   closeDrawer();
 }
 function closeModal(){
@@ -601,7 +526,53 @@ function closeModal(){
   m.setAttribute("aria-hidden", "true");
 }
 
-function initGraphSystems(){
+/* -------- Graph data: CONNECTED like Obsidian -------- */
+
+function buildGraphData(){
+  const nodes = [];
+  const links = [];
+
+  const cats = dedupe(state.categories).map(normalizeCategory);
+
+  // Hub node (connects all topics)
+  const HUB_ID = "hub:ultrase7en";
+  nodes.push({ id: HUB_ID, type: "hub", label: "ULTRASE7EN" });
+
+  // Category nodes + thick topic backbone links
+  for(const c of cats){
+    const catId = `cat:${c}`;
+    nodes.push({ id: catId, type: "category", label: displayCategory(c), category: c });
+    links.push({ source: HUB_ID, target: catId, kind: "topic" });
+  }
+
+  // Also connect categories in a ring for cohesion
+  for(let i = 0; i < cats.length; i++){
+    const a = `cat:${cats[i]}`;
+    const b = `cat:${cats[(i + 1) % cats.length]}`;
+    if(cats.length > 1) links.push({ source: a, target: b, kind: "topic" });
+  }
+
+  // Entry nodes + thin intra-topic links
+  for(const w of state.web){
+    const cat = normalizeCategory(w.category);
+    const catId = `cat:${cat}`;
+
+    nodes.push({
+      id: w.id,
+      type: "entry",
+      label: (w.title || w.body || "entry").slice(0, 28),
+      category: cat,
+      body: w.body || "",
+      createdAt: w.createdAt,
+    });
+
+    links.push({ source: catId, target: w.id, kind: "entry" });
+  }
+
+  return { nodes, links };
+}
+
+function initGraphs(){
   state.graph.drawerGraph = createGraphSystem({
     svgEl: el("graphSvg"),
     detailsEl: el("graphDetails"),
@@ -611,8 +582,6 @@ function initGraphSystems(){
     svgEl: el("graphSvgModal"),
     detailsEl: el("graphDetailsModal"),
   });
-
-  rebuildGraphs();
 }
 
 function rebuildGraphs(){
@@ -621,46 +590,10 @@ function rebuildGraphs(){
   state.graph.modalGraph?.setData(data);
 }
 
-function buildGraphData(){
-  // Nodes:
-  // - category nodes: id = "cat:<name>"
-  // - entry nodes: id = webItem.id
-  // Links: cat -> entry
-  const nodes = [];
-  const links = [];
-
-  const cats = dedupe(state.categories).map(normalizeCategory);
-
-  for(const c of cats){
-    nodes.push({
-      id: `cat:${c}`,
-      type: "category",
-      label: displayCategory(c),
-      category: c,
-    });
-  }
-
-  for(const w of state.web){
-    const cat = normalizeCategory(w.category);
-    nodes.push({
-      id: w.id,
-      type: "entry",
-      label: (w.title || w.body || "entry").slice(0, 28),
-      category: cat,
-      body: w.body || "",
-      createdAt: w.createdAt,
-    });
-    links.push({
-      source: `cat:${cat}`,
-      target: w.id,
-    });
-  }
-
-  return { nodes, links };
-}
-
 function createGraphSystem({ svgEl, detailsEl }){
   const svg = d3.select(svgEl);
+  svg.selectAll("*").remove();
+
   const rootG = svg.append("g");
   const linkG = rootG.append("g").attr("class", "links");
   const nodeG = rootG.append("g").attr("class", "nodes");
@@ -675,18 +608,17 @@ function createGraphSystem({ svgEl, detailsEl }){
   let data = { nodes: [], links: [] };
 
   const palette = {
-    catStroke: "rgba(167,139,250,.35)",
-    catFill: "rgba(167,139,250,.10)",
-    entryStroke: "rgba(255,255,255,.16)",
-    entryFill: "rgba(0,0,0,.20)",
-    link: "rgba(255,255,255,.10)",
-    active: "rgba(167,139,250,.85)",
+    topicStroke: "rgba(190,160,255,0.62)",
+    entryStroke:  "rgba(255,255,255,0.60)",
+    topicLink:    "rgba(190,160,255,0.55)",
+    entryLink:    "rgba(255,255,255,0.26)",
+    active:       "rgba(190,160,255,0.95)",
   };
 
   function resize(){
     const rect = svgEl.getBoundingClientRect();
     svg.attr("width", rect.width).attr("height", rect.height);
-    sim?.alpha(0.4).restart();
+    sim?.alpha(0.35).restart();
   }
 
   function setDetails(title, body){
@@ -699,7 +631,6 @@ function createGraphSystem({ svgEl, detailsEl }){
   function setData(next){
     data = next;
 
-    // clear existing
     linkG.selectAll("*").remove();
     nodeG.selectAll("*").remove();
     sim?.stop();
@@ -707,13 +638,13 @@ function createGraphSystem({ svgEl, detailsEl }){
     const rect = svgEl.getBoundingClientRect();
     svg.attr("width", rect.width).attr("height", rect.height);
 
-  const links = linkG.selectAll("line")
-  .data(data.links, d => `${d.source}->${d.target}`)
-  .enter()
-  .append("line")
-  .attr("stroke", "rgba(255,255,255,0.32)")
-  .attr("stroke-width", 1.2);
-
+    const links = linkG.selectAll("line")
+      .data(data.links, d => `${d.source}->${d.target}:${d.kind || "entry"}`)
+      .enter()
+      .append("line")
+      .attr("stroke", d => d.kind === "topic" ? palette.topicLink : palette.entryLink)
+      .attr("stroke-width", d => d.kind === "topic" ? 2.6 : 1.1)
+      .attr("opacity", d => d.kind === "topic" ? 0.9 : 0.8);
 
     const nodes = nodeG.selectAll("g")
       .data(data.nodes, d => d.id)
@@ -721,37 +652,54 @@ function createGraphSystem({ svgEl, detailsEl }){
       .append("g")
       .attr("cursor", "pointer");
 
-    // circles (improved contrast)
-nodes.append("circle")
-  .attr("r", d => d.type === "category" ? 20 : 12)
-  .attr("fill", d =>
-    d.type === "category"
-      ? "rgba(167,139,250,0.35)"
-      : "rgba(255,255,255,0.22)"
-  )
-  .attr("stroke", d =>
-    d.type === "category"
-      ? "rgba(200,175,255,0.95)"
-      : "rgba(255,255,255,0.65)"
-  )
-  .attr("stroke-width", d => d.type === "category" ? 2.4 : 1.4);
+    nodes.append("circle")
+      .attr("r", d => d.type === "hub" ? 26 : (d.type === "category" ? 20 : 12))
+      .attr("fill", d => {
+        if(d.type === "hub") return "rgba(190,160,255,0.18)";
+        if(d.type === "category") return "rgba(167,139,250,0.35)";
+        return "rgba(255,255,255,0.22)";
+      })
+      .attr("stroke", d => {
+        if(d.type === "hub") return "rgba(190,160,255,0.85)";
+        if(d.type === "category") return "rgba(200,175,255,0.95)";
+        return palette.entryStroke;
+      })
+      .attr("stroke-width", d => d.type === "hub" ? 2.8 : (d.type === "category" ? 2.4 : 1.4));
 
-
-    // labels
     nodes.append("text")
-      .text(d => d.type === "category" ? d.label : "")
-      .attr("x", d => d.type === "category" ? 24 : 14)
+      .text(d => (d.type === "category" || d.type === "hub") ? d.label : "")
+      .attr("x", d => (d.type === "category" || d.type === "hub") ? 28 : 14)
       .attr("y", 4)
-      .attr("fill", "rgba(233,233,238,.75)")
+      .attr("fill", "rgba(233,233,238,0.82)")
       .attr("font-size", 11)
       .attr("font-family", "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace")
       .attr("letter-spacing", ".12em");
+
+    // hover glow
+    nodes.on("mouseenter", function(event, d){
+      d3.select(this).select("circle")
+        .attr("stroke", palette.active)
+        .attr("stroke-width", d.type === "entry" ? 2.2 : 3.0)
+        .style("filter", "drop-shadow(0px 0px 10px rgba(190,160,255,0.35))");
+    }).on("mouseleave", function(event, d){
+      const circle = d3.select(this).select("circle");
+      circle.style("filter", null);
+      // don’t override active selection; reset lightly
+      circle.attr("stroke", d.type === "hub"
+        ? "rgba(190,160,255,0.85)"
+        : (d.type === "category"
+            ? "rgba(200,175,255,0.95)"
+            : palette.entryStroke
+          )
+      );
+      circle.attr("stroke-width", d.type === "hub" ? 2.8 : (d.type === "category" ? 2.4 : 1.4));
+    });
 
     // drag
     nodes.call(
       d3.drag()
         .on("start", (event, d) => {
-          if(!event.active) sim.alphaTarget(0.3).restart();
+          if(!event.active) sim.alphaTarget(0.25).restart();
           d.fx = d.x; d.fy = d.y;
         })
         .on("drag", (event, d) => {
@@ -762,72 +710,62 @@ nodes.append("circle")
           d.fx = null; d.fy = null;
         })
     );
-    // hover glow
-nodes
-  .on("mouseenter", function () {
-    d3.select(this).select("circle")
-      .attr("stroke-width", 3)
-      .attr("filter", "drop-shadow(0 0 10px rgba(190,160,255,0.9))");
-  })
-  .on("mouseleave", function (event, d) {
-    d3.select(this).select("circle")
-      .attr("stroke-width", d.type === "category" ? 2.4 : 1.4)
-      .attr("filter", null);
-  });
-
 
     // click
     nodes.on("click", (event, d) => {
       event.stopPropagation();
 
-      // set active styles
       nodeG.selectAll("circle")
-        .attr("stroke", n => {
-  if(n.id === d.id) return "rgba(190,160,255,0.95)";
-  return n.type === "category"
-    ? "rgba(200,175,255,0.95)"
-    : "rgba(255,255,255,0.65)";
-})
-.attr("stroke-width", n => {
-  if(n.id === d.id) return 3;
-  return n.type === "category" ? 2.4 : 1.4;
-});
+        .attr("stroke", n => n.id === d.id ? palette.active : (
+          n.type === "hub" ? "rgba(190,160,255,0.85)" :
+          n.type === "category" ? "rgba(200,175,255,0.95)" :
+          palette.entryStroke
+        ))
+        .attr("stroke-width", n => n.id === d.id ? 3.0 : (
+          n.type === "hub" ? 2.8 :
+          n.type === "category" ? 2.4 :
+          1.4
+        ));
 
+      if(d.type === "hub"){
+        setDetails("ULTRASE7EN", `${data.nodes.filter(x => x.type === "entry").length} total entries across ${data.nodes.filter(x => x.type === "category").length} categories.`);
+        return;
+      }
 
       if(d.type === "category"){
         const count = data.nodes.filter(x => x.type === "entry" && x.category === d.category).length;
-        setDetails(
-          `Category: ${displayCategory(d.category)}`,
-          `${count} node(s) in this category.`
-        );
+        setDetails(`Category: ${displayCategory(d.category)}`, `${count} node(s) in this category.`);
       }else{
-        setDetails(
-          `${displayCategory(d.category)} • ${formatTime(new Date(d.createdAt))}`,
-          d.body || ""
-        );
+        setDetails(`${displayCategory(d.category)} • ${formatTime(new Date(d.createdAt))}`, d.body || "");
         highlightWebItem(d.id);
       }
     });
 
-    // click background clears selection
     svg.on("click", () => {
       nodeG.selectAll("circle")
-        .attr("stroke", n =>
-  n.type === "category"
-    ? "rgba(200,175,255,0.95)"
-    : "rgba(255,255,255,0.65)"
-)
-.attr("stroke-width", n => n.type === "category" ? 2.4 : 1.4);
+        .attr("stroke", n => (
+          n.type === "hub" ? "rgba(190,160,255,0.85)" :
+          n.type === "category" ? "rgba(200,175,255,0.95)" :
+          palette.entryStroke
+        ))
+        .attr("stroke-width", n => (
+          n.type === "hub" ? 2.8 :
+          n.type === "category" ? 2.4 :
+          1.4
+        ));
 
       setDetails("Select a node", "Click a category or an entry to view details.");
     });
 
-    // force sim
+    // force sim tuned for connected backbone
     sim = d3.forceSimulation(data.nodes)
-      .force("link", d3.forceLink(data.links).id(d => d.id).distance(d => 70).strength(0.6))
-      .force("charge", d3.forceManyBody().strength(-230))
+      .force("link", d3.forceLink(data.links).id(d => d.id)
+        .distance(l => l.kind === "topic" ? 150 : 70)
+        .strength(l => l.kind === "topic" ? 0.35 : 0.72)
+      )
+      .force("charge", d3.forceManyBody().strength(-260))
       .force("center", d3.forceCenter(rect.width / 2, rect.height / 2))
-      .force("collide", d3.forceCollide().radius(d => d.type === "category" ? 26 : 16))
+      .force("collide", d3.forceCollide().radius(d => d.type === "hub" ? 34 : (d.type === "category" ? 26 : 16)))
       .on("tick", () => {
         links
           .attr("x1", d => d.source.x)
@@ -844,14 +782,14 @@ nodes
   function fit(){
     const rect = svgEl.getBoundingClientRect();
     if(!data.nodes.length) return;
-    // compute bounds
+
     const xs = data.nodes.map(n => n.x ?? 0);
     const ys = data.nodes.map(n => n.y ?? 0);
     const minX = Math.min(...xs), maxX = Math.max(...xs);
     const minY = Math.min(...ys), maxY = Math.max(...ys);
 
-    const w = maxX - minX || 1;
-    const h = maxY - minY || 1;
+    const w = (maxX - minX) || 1;
+    const h = (maxY - minY) || 1;
 
     const scale = Math.max(0.25, Math.min(1.6, 0.86 / Math.max(w / rect.width, h / rect.height)));
     const tx = (rect.width - scale * (minX + maxX)) / 2;
@@ -863,23 +801,20 @@ nodes
     );
   }
 
-  function reset(){
-    sim?.alpha(0.8).restart();
-    fit();
-  }
+  function reset(){ sim?.alpha(0.8).restart(); fit(); }
 
   function search(q){
-    const query = String(q || "").trim().toLowerCase();
+    const query = String(q||"").trim().toLowerCase();
     if(!query){
       nodeG.selectAll("circle").attr("opacity", 1);
       nodeG.selectAll("text").attr("opacity", 1);
       linkG.selectAll("line").attr("opacity", 1);
       return;
     }
-
     const match = (d) => {
-      if(d.type === "category") return d.category.includes(query) || d.label.toLowerCase().includes(query);
-      return (d.body || "").toLowerCase().includes(query) || (d.label || "").toLowerCase().includes(query);
+      if(d.type === "hub") return "ultrase7en".includes(query);
+      if(d.type === "category") return (d.category||"").includes(query) || (d.label||"").toLowerCase().includes(query);
+      return (d.body||"").toLowerCase().includes(query) || (d.label||"").toLowerCase().includes(query);
     };
 
     nodeG.selectAll("circle").attr("opacity", d => match(d) ? 1 : 0.18);
@@ -895,15 +830,11 @@ nodes
   function focusNode(nodeId){
     const n = data.nodes.find(x => x.id === nodeId);
     if(!n) return;
-    // center on node
     const rect = svgEl.getBoundingClientRect();
     const scale = 1.25;
     const tx = rect.width / 2 - (n.x * scale);
     const ty = rect.height / 2 - (n.y * scale);
-    svg.transition().duration(450).call(
-      zoom.transform,
-      d3.zoomIdentity.translate(tx, ty).scale(scale)
-    );
+    svg.transition().duration(450).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
   }
 
   return { setData, resize, fit, reset, search, focusNode };

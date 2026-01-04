@@ -1,109 +1,97 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>UltraSe7en — Dashboard</title>
-  <link rel="stylesheet" href="./dashboard.css" />
-  <!-- D3 for force graph -->
+  <link rel="stylesheet" href="dashboard.css" />
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
-<body>
-  <div class="bg"></div>
+<body class="dash">
 
   <header class="topbar">
     <div class="brand">ULTRASE7EN — DASHBOARD</div>
-    <div class="topbar-right">
-      <div id="todayDate" class="date"></div>
-    </div>
+    <div class="date" id="todayDate">0000-00-00</div>
   </header>
 
   <main class="grid">
-    <!-- COMMAND -->
-    <section class="panel panel-command">
-      <div class="panel-header">
+    <!-- LEFT: COMMAND -->
+    <section class="panel">
+      <div class="panel-head">
         <div class="panel-title">COMMAND</div>
       </div>
 
-      <div class="panel-body">
-        <div class="hint">
-          <div>Format: <b>category:</b> your text (category can include spaces)</div>
-          <div>New category: <b>NC:</b> Category Name</div>
-          <div>Autocomplete: <b>Tab</b> completes • <b>↑/↓</b> cycles</div>
-        </div>
+      <div class="help">
+        <div>Format: <b>category:</b> your text (category can include spaces)</div>
+        <div>New category: <b>NC:</b> Category Name</div>
+        <div>Autocomplete: <b>Tab</b> completes • <b>↑/↓</b> cycles</div>
+      </div>
 
-        <div class="command-box">
-          <textarea id="commandInput" spellcheck="false" placeholder="Examples:
+      <div class="command-wrap">
+        <textarea id="commandInput" class="command" rows="10" spellcheck="false"
+          placeholder="Examples:
 note: fixed DNS issues in containers
-project update: built the web visualizer
+project update: built the node feature
 to do: refactor dashboard layout
 NC: Enrichment Projects"></textarea>
 
-          <div class="command-footer">
-            <div class="micro">
-              SUBMIT saves to <b>TODAY</b>. Promote to <b>WEB</b> manually, or it will auto-promote on the next day.
-            </div>
-            <button id="submitBtn" class="btn btn-primary">SUBMIT</button>
-          </div>
+        <div id="autocomplete" class="autocomplete hidden"></div>
 
-          <div id="autocomplete" class="autocomplete hidden"></div>
+        <div class="command-actions">
+          <div class="hint">SUBMIT saves to <b>TODAY</b>. Promote to <b>WEB</b> manually, or it auto-promotes next day.</div>
+          <button id="submitBtn" class="btn btn-primary">SUBMIT</button>
         </div>
       </div>
     </section>
 
-    <!-- TODAY -->
-    <section class="panel panel-today">
-      <div class="panel-header">
+    <!-- MIDDLE: TODAY -->
+    <section class="panel">
+      <div class="panel-head">
         <div class="panel-title">TODAY</div>
-        <div class="panel-actions">
+        <div class="panel-head-actions">
           <button id="addAllToWebBtn" class="btn btn-ghost">ADD ALL TO WEB</button>
           <button id="clearTodayBtn" class="btn btn-danger">CLEAR TODAY</button>
         </div>
       </div>
 
-      <div class="panel-body">
-        <div id="todayList" class="list"></div>
-        <div id="todayEmpty" class="empty">No entries yet.</div>
-      </div>
+      <div id="todayEmpty" class="empty">No entries yet.</div>
+      <div id="todayList" class="list"></div>
     </section>
 
-    <!-- WEB -->
-    <section class="panel panel-web">
-      <div class="panel-header">
+    <!-- RIGHT: WEB (and graph entry points) -->
+    <section class="panel">
+      <div class="panel-head">
         <div class="panel-title">WEB</div>
-        <div class="panel-actions">
+        <div class="panel-head-actions">
           <button id="openGraphBtn" class="btn btn-ghost">GRAPH</button>
           <button id="expandGraphBtn" class="btn btn-ghost">EXPAND</button>
         </div>
       </div>
 
-      <div class="panel-body">
-        <div id="webGroups" class="web-groups"></div>
-      </div>
+      <div id="webGroups" class="web-groups"></div>
     </section>
   </main>
 
-  <!-- GRAPH DRAWER -->
-  <aside id="graphDrawer" class="drawer" aria-hidden="true">
-    <div class="drawer-header">
-      <div class="drawer-title">KNOWLEDGE GRAPH</div>
-      <div class="drawer-actions">
-        <button id="drawerExpandBtn" class="btn btn-ghost">EXPAND</button>
+  <!-- Graph Drawer (kept, but GRAPH/EXPAND opens fullscreen modal) -->
+  <aside id="graphDrawer" class="graph-drawer" aria-hidden="true">
+    <div class="graph-drawer-head">
+      <div class="graph-title">KNOWLEDGE GRAPH</div>
+      <div class="graph-actions">
         <button id="drawerCloseBtn" class="btn btn-ghost">CLOSE</button>
+        <button id="drawerExpandBtn" class="btn btn-ghost">EXPAND</button>
       </div>
     </div>
 
-    <div class="drawer-body">
-      <div class="graph-toolbar">
+    <div class="graph-toolbar">
+      <input id="graphSearch" class="graph-search" placeholder="Search nodes…" />
+      <div class="graph-toolbar-actions">
         <button id="graphFitBtn" class="btn btn-ghost">FIT</button>
         <button id="graphResetBtn" class="btn btn-ghost">RESET</button>
-        <input id="graphSearch" class="graph-search" type="text" placeholder="Search nodes…" />
       </div>
+    </div>
 
-      <div class="graph-wrap">
-        <svg id="graphSvg" class="graph"></svg>
-      </div>
-
+    <div class="graph-stage">
+      <svg id="graphSvg" class="graph-svg"></svg>
       <div id="graphDetails" class="graph-details">
         <div class="graph-details-title">Select a node</div>
         <div class="graph-details-body">Click a category or an entry to view details.</div>
@@ -111,27 +99,28 @@ NC: Enrichment Projects"></textarea>
     </div>
   </aside>
 
-  <!-- GRAPH MODAL (EXPANDED) -->
-  <div id="graphModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-surface">
-      <div class="modal-header">
-        <div class="modal-title">KNOWLEDGE GRAPH — EXPANDED</div>
-        <div class="modal-actions">
+  <!-- Fullscreen Modal Graph -->
+  <div id="graphModal" class="graph-modal hidden" aria-hidden="true">
+    <div class="graph-modal-inner" role="dialog" aria-modal="true">
+      <div class="graph-modal-head">
+        <div class="graph-title">KNOWLEDGE GRAPH</div>
+        <div class="graph-actions">
           <button id="modalFitBtn" class="btn btn-ghost">FIT</button>
           <button id="modalCloseBtn" class="btn btn-ghost">CLOSE</button>
         </div>
       </div>
 
-      <div class="modal-body">
-        <svg id="graphSvgModal" class="graph graph--modal"></svg>
-        <div id="graphDetailsModal" class="graph-details graph-details--modal">
-          <div class="graph-details-title">Select a node</div>
-          <div class="graph-details-body">Click a category or an entry to view details.</div>
-        </div>
+      <div class="graph-modal-stage">
+        <svg id="graphSvgModal" class="graph-svg"></svg>
+      </div>
+
+      <div id="graphDetailsModal" class="graph-details graph-details-modal">
+        <div class="graph-details-title">Select a node</div>
+        <div class="graph-details-body">Click a category or an entry to view details.</div>
       </div>
     </div>
   </div>
 
-  <script src="./dashboard.js"></script>
+  <script src="dashboard.js"></script>
 </body>
 </html>
