@@ -1,47 +1,98 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>No Option.</title>
-  <link rel="stylesheet" href="notion.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UltraSe7en — Notes</title>
+
+  <!-- Keep separate so it doesn't interfere with existing site styling -->
+  <link rel="stylesheet" href="/notion.css" />
 </head>
+
 <body>
-
   <div class="app">
-
     <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-title">Aatir’s Workspace</div>
+    <aside class="sidebar" aria-label="Sidebar">
+      <div class="sidebar__top">
+        <div class="workspace">
+          <div class="workspace__avatar" aria-hidden="true">A</div>
+          <div class="workspace__meta">
+            <div class="workspace__name">Aatir’s Workspace</div>
+            <div class="workspace__sub">Private</div>
+          </div>
+        </div>
 
-      <nav class="sidebar-nav">
-        <a class="active">No Option.</a>
-        <a>Arkham Command Center</a>
-        <a>Locked In.</a>
-        <a>Do This.</a>
-        <a>Wholesale Real Estate</a>
-      </nav>
+        <div class="sidebar__actions">
+          <button class="iconbtn" id="newPageBtn" title="New page" aria-label="New page">
+            +
+          </button>
+        </div>
+      </div>
 
-      <div class="sidebar-footer">
-        <span>Private</span>
+      <div class="sidebar__search">
+        <input id="pageSearch" type="text" placeholder="Search pages" autocomplete="off" />
+      </div>
+
+      <div class="sidebar__section">
+        <div class="sidebar__sectionTitle">Pages</div>
+        <nav class="pages" id="pagesList" aria-label="Pages list"></nav>
+      </div>
+
+      <div class="sidebar__footer">
+        <a class="sidebar__link" href="/" title="Back to landing">← Back</a>
+        <span class="sidebar__hint">Local-only prototype</span>
       </div>
     </aside>
 
-    <!-- Main Content -->
-    <main class="page">
-      <h1>No Option.</h1>
+    <!-- Main -->
+    <main class="main">
+      <header class="topbar" aria-label="Top bar">
+        <div class="crumbs">
+          <span class="crumbs__app">UltraSe7en</span>
+          <span class="crumbs__sep">/</span>
+          <span class="crumbs__page" id="crumbPage">Notes</span>
+        </div>
 
-      <ul class="bullet-list">
-        <li>Lamborghini before I turn 30</li>
-        <li>Clothing brand success</li>
-        <li>Personal Brand Page</li>
-        <li>3 streams of income generating 10k a month</li>
-        <li>Fix teeth</li>
-        <li>6 pack</li>
-        <li>High Rise Apartment</li>
-      </ul>
+        <div class="topbar__right">
+          <span class="pill">Ctrl/⌘ + S saves</span>
+          <button class="ghostbtn" id="exportBtn" title="Export page as .txt">Export</button>
+        </div>
+      </header>
+
+      <section class="editorWrap" aria-label="Editor">
+        <div class="editor">
+          <input
+            id="pageTitle"
+            class="pageTitle"
+            type="text"
+            placeholder="Untitled"
+            spellcheck="false"
+            autocomplete="off"
+          />
+
+          <div
+            id="pageEditor"
+            class="pageEditor"
+            contenteditable="true"
+            spellcheck="true"
+            data-placeholder="Type anywhere…  (Later: NC: category, NOTE:, TO DO:, etc.)"
+          ></div>
+
+          <div class="statusbar">
+            <div class="statusbar__left" id="saveStatus">Saved</div>
+            <div class="statusbar__right" id="wordCount">0 words</div>
+          </div>
+        </div>
+      </section>
     </main>
 
+    <!-- Simple context menu -->
+    <div class="menu hidden" id="pageMenu" role="menu" aria-hidden="true">
+      <button class="menu__item" id="renamePageBtn" role="menuitem">Rename</button>
+      <button class="menu__item danger" id="deletePageBtn" role="menuitem">Delete</button>
+    </div>
   </div>
 
+  <script src="/notion.js"></script>
 </body>
 </html>
