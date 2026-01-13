@@ -1,0 +1,85 @@
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  background: #121212;
+  color: #eaeaea;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Layout */
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 260px;
+  background: #0f0f0f;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 20px;
+  opacity: 0.9;
+}
+
+.sidebar-nav a {
+  display: block;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #cfcfcf;
+  font-size: 14px;
+}
+
+.sidebar-nav a.active {
+  background: rgba(255,255,255,0.08);
+  color: #ffffff;
+}
+
+.sidebar-nav a:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  font-size: 12px;
+  opacity: 0.4;
+}
+
+/* Page */
+.page {
+  flex: 1;
+  padding: 80px 100px;
+}
+
+.page h1 {
+  font-size: 48px;
+  font-weight: 700;
+  margin-bottom: 30px;
+}
+
+/* List */
+.bullet-list {
+  list-style: disc;
+  padding-left: 20px;
+}
+
+.bullet-list li {
+  font-size: 16px;
+  line-height: 1.9;
+  opacity: 0.9;
+}
