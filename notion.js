@@ -20,7 +20,9 @@ let state = {
   pages: [],
   activeId: null,
   menuForPageId: null,
-  mode: "flow",
+  mode: "flow", // "flow" | "canvas"
+  canvasArmed: false, // when true, next click places a block
+  drag: null, // active drag state
 };
 
 function uid(){
@@ -55,6 +57,7 @@ function load(){
         <li>6 pack</li>
         <li>High Rise Apartment</li>
       </ul>`,
+      canvasBlocks: [],
       updatedAt: Date.now(),
     };
     state.pages = [first];
@@ -160,15 +163,26 @@ function renderEditor(){
   // flow
   $("flowEditor").innerHTML = p?.flowHTML || "";
 
+  // canvas
+  renderCanvasBlocks(p?.canvasBlocks || []);
+
   updateCounts();
   setSaved("Saved");
 }
 
 function syncModeUI(){
-  state.mode = "flow";
-  $("modeFlowBtn").classList.add("active");
-  $("modeFlowBtn").setAttribute("aria-selected", "true");
-  $("flowEditor").classList.remove("hidden");
+  const isFlow = state.mode === "flow";
+  $("modeFlowBtn").classList.toggle("active", isFlow);
+  $("modeCanvasBtn").classList.toggle("active", !isFlow);
+  $("modeFlowBtn").setAttribute("aria-selected", String(isFlow));
+  $("modeCanvasBtn").setAttribute("aria-selected", String(!isFlow));
+
+  $("flowEditor").classList.toggle("hidden", !isFlow);
+  $("canvasEditor").classList.toggle("hidden", isFlow);
+
+  $("addBlockBtn").style.display = isFlow ? "none" : "inline-flex";
+  state.canvasArmed = false;
+  $("addBlockBtn").textContent = "+ Block";
 }
 
 function setSaved(text){
@@ -180,7 +194,13 @@ function updateCounts(){
   if(!p) return;
 
   let text = "";
-  text = ($("flowEditor").innerText || "").trim();
+  if(state.mode === "flow"){
+    text = ($("flowEditor").innerText || "").trim();
+  }else{
+    // count canvas blocks text
+    const blocks = p.canvasBlocks || [];
+    text = blocks.map(b => (b.text || "")).join("\n").trim();
+  }
 
   const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
   $("wordCount").textContent = `${words} word${words === 1 ? "" : "s"}`;
@@ -191,6 +211,7 @@ function createPage(){
     id: uid(),
     title: "Untitled",
     flowHTML: "",
+    canvasBlocks: [],
     updatedAt: Date.now(),
   };
   state.pages.push(p);
@@ -244,6 +265,7 @@ function saveActive(){
 
   p.title = $("pageTitle").value || "";
   p.flowHTML = $("flowEditor").innerHTML || "";
+  // canvasBlocks are updated as you type/drag
   p.updatedAt = Date.now();
 
   persist();
@@ -267,7 +289,11 @@ function exportActive(){
   const title = (p.title?.trim() ? p.title.trim() : "Untitled").replace(/[^\w\- ]+/g, "").slice(0, 64);
 
   let text = "";
-  text = ($("flowEditor").innerText || "").trim();
+  if(state.mode === "flow"){
+    text = ($("flowEditor").innerText || "").trim();
+  }else{
+    text = (p.canvasBlocks || []).map(b => b.text || "").join("\n\n").trim();
+  }
 
   const blob = new Blob([`# ${p.title || "Untitled"}\n\n${text}\n`], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -392,7 +418,155 @@ function insertHTML(html){
   updateCounts();
   closePalette();
 }
-\r\n/* --------------- Bullets + minimal typing helpers (Flow) --------------- */
+
+/* --------------- Canvas blocks (true type-anywhere) --------------- */
+
+function renderCanvasBlocks(blocks){
+  const canvas = $("canvasEditor");
+  // Remove existing blocks
+  canvas.querySelectorAll(".block").forEach(b => b.remove());
+
+  for(const b of blocks){
+    const el = makeBlockElement(b);
+    canvas.appendChild(el);
+  }
+
+  $("canvasHint").style.display = blocks.length ? "none" : "inline-flex";
+}
+
+function makeBlockElement(block){
+  const wrap = document.createElement("div");
+  wrap.className = "block";
+  wrap.dataset.blockId = block.id;
+  wrap.style.left = `${block.x}px`;
+  wrap.style.top = `${block.y}px`;
+
+  const bar = document.createElement("div");
+  bar.className = "block__bar";
+  bar.innerHTML = `<div class="block__handle">⋮⋮</div>`;
+
+  const tools = document.createElement("div");
+  tools.className = "block__tools";
+
+  const del = document.createElement("button");
+  del.className = "block__tool";
+  del.title = "Delete block";
+  del.textContent = "×";
+  del.addEventListener("click", (e) => {
+    e.stopPropagation();
+    deleteBlock(block.id);
+  });
+
+  tools.appendChild(del);
+  bar.appendChild(tools);
+
+  const body = document.createElement("div");
+  body.className = "block__body";
+  body.contentEditable = "true";
+  body.spellcheck = true;
+  body.innerText = block.text || "";
+  body.addEventListener("input", () => {
+    const p = activePage();
+    const b = p?.canvasBlocks?.find(x => x.id === block.id);
+    if(!b) return;
+    b.text = body.innerText;
+    scheduleSave();
+    updateCounts();
+  });
+
+  // Dragging only by the bar
+  bar.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    startDrag(e, wrap, block.id);
+  });
+
+  wrap.appendChild(bar);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function startDrag(e, node, blockId){
+  const rect = node.getBoundingClientRect();
+  state.drag = {
+    blockId,
+    node,
+    startX: e.clientX,
+    startY: e.clientY,
+    origLeft: rect.left,
+    origTop: rect.top,
+  };
+}
+
+function onDragMove(e){
+  if(!state.drag) return;
+
+  const canvas = $("canvasEditor");
+  const cRect = canvas.getBoundingClientRect();
+
+  const dx = e.clientX - state.drag.startX;
+  const dy = e.clientY - state.drag.startY;
+
+  // position relative to canvas
+  const newLeft = (state.drag.origLeft - cRect.left) + dx;
+  const newTop = (state.drag.origTop - cRect.top) + dy;
+
+  state.drag.node.style.left = `${Math.max(0, newLeft)}px`;
+  state.drag.node.style.top = `${Math.max(0, newTop)}px`;
+}
+
+function onDragEnd(){
+  if(!state.drag) return;
+
+  const p = activePage();
+  if(!p) { state.drag = null; return; }
+
+  const id = state.drag.blockId;
+  const b = p.canvasBlocks.find(x => x.id === id);
+  if(b){
+    b.x = parseFloat(state.drag.node.style.left) || 0;
+    b.y = parseFloat(state.drag.node.style.top) || 0;
+    scheduleSave();
+  }
+  state.drag = null;
+}
+
+function armPlaceBlock(){
+  state.canvasArmed = true;
+  $("addBlockBtn").textContent = "Click to place…";
+}
+
+function placeBlockAt(x, y){
+  const p = activePage();
+  if(!p) return;
+
+  const b = { id: uid(), x, y, text: "" };
+  p.canvasBlocks.push(b);
+  p.updatedAt = Date.now();
+
+  persist();
+  renderCanvasBlocks(p.canvasBlocks);
+  scheduleSave();
+
+  // focus the new block
+  const node = $("canvasEditor").querySelector(`.block[data-block-id="${b.id}"] .block__body`);
+  if(node){
+    node.focus();
+  }
+}
+
+function deleteBlock(blockId){
+  const p = activePage();
+  if(!p) return;
+
+  p.canvasBlocks = (p.canvasBlocks || []).filter(b => b.id !== blockId);
+  p.updatedAt = Date.now();
+  persist();
+  renderCanvasBlocks(p.canvasBlocks);
+  scheduleSave();
+  updateCounts();
+}
+
+/* --------------- Bullets + minimal typing helpers (Flow) --------------- */
 
 function autoBulletOnSpace(){
   // If user types "- " at the start of a paragraph, convert to UL
@@ -438,6 +612,12 @@ function wire(){
 
   // mode buttons
   $("modeFlowBtn").addEventListener("click", () => { state.mode = "flow"; syncModeUI(); updateCounts(); });
+  $("modeCanvasBtn").addEventListener("click", () => { state.mode = "canvas"; syncModeUI(); updateCounts(); });
+
+  $("addBlockBtn").addEventListener("click", () => {
+    if(state.mode !== "canvas") return;
+    armPlaceBlock();
+  });
 
   // title save
   $("pageTitle").addEventListener("input", scheduleSave);
@@ -484,6 +664,30 @@ function wire(){
       applyCommand(cmd);
     });
   });
+
+  // canvas click to place block
+  $("canvasEditor").addEventListener("click", (e) => {
+    if(state.mode !== "canvas") return;
+    if(!state.canvasArmed) return;
+
+    // don't place when clicking on an existing block
+    if(e.target.closest(".block")) return;
+
+    const canvas = $("canvasEditor");
+    const r = canvas.getBoundingClientRect();
+    const x = (e.clientX - r.left);
+    const y = (e.clientY - r.top);
+
+    // place slightly offset so it doesn't sit under cursor
+    placeBlockAt(Math.max(0, x - 40), Math.max(0, y - 12));
+
+    state.canvasArmed = false;
+    $("addBlockBtn").textContent = "+ Block";
+  });
+
+  // dragging blocks (global mouse listeners)
+  window.addEventListener("mousemove", onDragMove);
+  window.addEventListener("mouseup", onDragEnd);
 
   // page menu
   $("renamePageBtn").addEventListener("click", () => {
@@ -544,4 +748,3 @@ function openMenuForPage(pageId, anchorBtn){
   wire();
   render();
 })();
-
