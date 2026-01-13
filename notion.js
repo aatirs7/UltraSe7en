@@ -16,18 +16,6 @@ const THEMES = ["dark", "notionLight", "graphite", "midnight"];
 
 const $ = (id) => document.getElementById(id);
 
-const EMPTY_HINT_HTML = `<div id="emptyHint" class="empty-hint" contenteditable="false">
-  <h1 class="empty-title">Untitled</h1>
-  <p class="empty-sub">Type anywhere. Use <span class="kbd">/</span> for commands.</p>
-  <p class="empty-sub">Examples:</p>
-  <ul class="empty-list">
-    <li><span class="hint-tag">note:</span> fixed DNS issues in containers</li>
-    <li><span class="hint-tag">project update:</span> built node visualizer</li>
-    <li><span class="hint-tag">to do:</span> refactor dashboard layout</li>
-    <li><span class="hint-tag">NC:</span> Enrichment Projects</li>
-  </ul>
-</div><p><br></p>`;
-
 let state = {
   pages: [],
   activeId: null,
@@ -55,21 +43,20 @@ function load(){
   }
   state.activeId = localStorage.getItem(LS.activeId) || null;
 
-  if(state.pages.length){
-    state.pages = state.pages.map((p) => {
-      if(typeof p?.flowHTML === "string" && p.flowHTML.includes("Lamborghini before I turn 30")){
-        return { ...p, flowHTML: EMPTY_HINT_HTML };
-      }
-      return p;
-    });
-  }
-
   if(!state.pages.length){
     const first = {
       id: uid(),
-      title: "No Option.",
+      title: "Page.",
       // For v2 we store both editors:
-      flowHTML: EMPTY_HINT_HTML,
+      flowHTML: `<ul>
+        <li>Lamborghini before I turn 30</li>
+        <li>Clothing brand success</li>
+        <li>Personal brand page</li>
+        <li>3 streams of income generating 10k a month</li>
+        <li>Fix teeth</li>
+        <li>6 pack</li>
+        <li>High Rise Apartment</li>
+      </ul>`,
       canvasBlocks: [],
       updatedAt: Date.now(),
     };
@@ -174,9 +161,7 @@ function renderEditor(){
   $("pageTitle").value = p?.title || "";
 
   // flow
-  const flowHTML = (p?.flowHTML || "").trim();
-  $("flowEditor").innerHTML = flowHTML ? flowHTML : EMPTY_HINT_HTML;
-  toggleEmptyHint();
+  $("flowEditor").innerHTML = p?.flowHTML || "";
 
   // canvas
   renderCanvasBlocks(p?.canvasBlocks || []);
@@ -210,7 +195,7 @@ function updateCounts(){
 
   let text = "";
   if(state.mode === "flow"){
-    text = getFlowText().trim();
+    text = ($("flowEditor").innerText || "").trim();
   }else{
     // count canvas blocks text
     const blocks = p.canvasBlocks || [];
@@ -279,7 +264,7 @@ function saveActive(){
   if(!p) return;
 
   p.title = $("pageTitle").value || "";
-  p.flowHTML = getFlowHTMLForSave();
+  p.flowHTML = $("flowEditor").innerHTML || "";
   // canvasBlocks are updated as you type/drag
   p.updatedAt = Date.now();
 
@@ -617,36 +602,6 @@ function escapeHTML(s){
   }[c]));
 }
 
-function getFlowText(){
-  const editor = $("flowEditor");
-  if(!editor) return "";
-  const emptyHint = $("emptyHint");
-  if(!emptyHint) return editor.innerText || "";
-
-  const prevDisplay = emptyHint.style.display;
-  emptyHint.style.display = "none";
-  const text = editor.innerText || "";
-  emptyHint.style.display = prevDisplay;
-  return text;
-}
-
-function getFlowHTMLForSave(){
-  const editor = $("flowEditor");
-  if(!editor) return "";
-  const clone = editor.cloneNode(true);
-  const hint = clone.querySelector("#emptyHint");
-  if(hint) hint.remove();
-  return clone.innerHTML || "";
-}
-
-function toggleEmptyHint(){
-  const editor = $("flowEditor");
-  const emptyHint = $("emptyHint");
-  if(!editor || !emptyHint) return;
-  const hasText = getFlowText().trim().length > 0;
-  emptyHint.style.display = hasText ? "none" : "block";
-}
-
 /* ---------------- Wiring ---------------- */
 
 function wire(){
@@ -669,7 +624,6 @@ function wire(){
 
   // flow editor
   $("flowEditor").addEventListener("input", () => {
-    toggleEmptyHint();
     updateCounts();
     scheduleSave();
   });
