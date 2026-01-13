@@ -4,8 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>UltraSe7en — Notes</title>
-
-  <!-- Keep separate so it doesn't interfere with existing site styling -->
   <link rel="stylesheet" href="/notion.css" />
 </head>
 
@@ -23,9 +21,7 @@
         </div>
 
         <div class="sidebar__actions">
-          <button class="iconbtn" id="newPageBtn" title="New page" aria-label="New page">
-            +
-          </button>
+          <button class="iconbtn" id="newPageBtn" title="New page" aria-label="New page">+</button>
         </div>
       </div>
 
@@ -54,7 +50,13 @@
         </div>
 
         <div class="topbar__right">
-          <span class="pill">Ctrl/⌘ + S saves</span>
+          <div class="segmented" role="tablist" aria-label="Editor mode">
+            <button class="segbtn active" id="modeFlowBtn" role="tab" aria-selected="true">Flow</button>
+            <button class="segbtn" id="modeCanvasBtn" role="tab" aria-selected="false">Canvas</button>
+          </div>
+
+          <button class="ghostbtn" id="addBlockBtn" title="Add draggable text block" style="display:none;">+ Block</button>
+          <button class="ghostbtn" id="themeBtn" title="Toggle theme">Theme</button>
           <button class="ghostbtn" id="exportBtn" title="Export page as .txt">Export</button>
         </div>
       </header>
@@ -70,13 +72,19 @@
             autocomplete="off"
           />
 
-          <div
-            id="pageEditor"
-            class="pageEditor"
-            contenteditable="true"
-            spellcheck="true"
-            data-placeholder="Type anywhere…  (Later: NC: category, NOTE:, TO DO:, etc.)"
-          ></div>
+          <!-- FLOW editor -->
+          <div id="flowEditor"
+               class="pageEditor"
+               contenteditable="true"
+               spellcheck="true"
+               data-placeholder="Type…  Use / for commands.  - for bullets."></div>
+
+          <!-- CANVAS editor -->
+          <div id="canvasEditor" class="canvas hidden" aria-label="Canvas editor">
+            <div class="canvas__hint" id="canvasHint">
+              Click “+ Block”, then click anywhere to place a block. Drag blocks by the handle.
+            </div>
+          </div>
 
           <div class="statusbar">
             <div class="statusbar__left" id="saveStatus">Saved</div>
@@ -86,10 +94,21 @@
       </section>
     </main>
 
-    <!-- Simple context menu -->
+    <!-- Page options menu -->
     <div class="menu hidden" id="pageMenu" role="menu" aria-hidden="true">
       <button class="menu__item" id="renamePageBtn" role="menuitem">Rename</button>
       <button class="menu__item danger" id="deletePageBtn" role="menuitem">Delete</button>
+    </div>
+
+    <!-- Slash command palette -->
+    <div class="palette hidden" id="slashPalette" role="listbox" aria-hidden="true">
+      <div class="palette__title">Commands</div>
+      <button class="palette__item" data-cmd="h1">Heading 1</button>
+      <button class="palette__item" data-cmd="h2">Heading 2</button>
+      <button class="palette__item" data-cmd="bullet">Bullet list</button>
+      <button class="palette__item" data-cmd="todo">To-do</button>
+      <button class="palette__item" data-cmd="quote">Quote</button>
+      <button class="palette__item" data-cmd="divider">Divider</button>
     </div>
   </div>
 
