@@ -77,7 +77,20 @@
                class="pageEditor"
                contenteditable="true"
                spellcheck="true"
-               data-placeholder="Type…  Use / for commands.  - for bullets."></div>
+               data-placeholder="Type…  Use / for commands.  - for bullets.">
+            <div id="emptyHint" class="empty-hint" contenteditable="false">
+              <h1 class="empty-title">Untitled</h1>
+              <p class="empty-sub">Type anywhere. Use <span class="kbd">/</span> for commands.</p>
+              <p class="empty-sub">Examples:</p>
+              <ul class="empty-list">
+                <li><span class="hint-tag">note:</span> fixed DNS issues in containers</li>
+                <li><span class="hint-tag">project update:</span> built node visualizer</li>
+                <li><span class="hint-tag">to do:</span> refactor dashboard layout</li>
+                <li><span class="hint-tag">NC:</span> Enrichment Projects</li>
+              </ul>
+            </div>
+            <p><br /></p>
+          </div>
 
           <!-- CANVAS editor -->
           <div id="canvasEditor" class="canvas hidden" aria-label="Canvas editor">
@@ -115,3 +128,4 @@
   <script src="/notion.js"></script>
 </body>
 </html>
+
