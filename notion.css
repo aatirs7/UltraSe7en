@@ -518,3 +518,86 @@ body{
   .editorWrap{ padding-top: 14px; }
   .pageTitle{ font-size: 36px; }
 }
+
+
+/* ===============================
+   Hover Toolbar (Notion-style)
+   =============================== */
+
+/* Header hover zone */
+.page-header{
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(18,19,23,0.72);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Invisible toolbar area (shows on hover) */
+.hover-toolbar-zone{
+  position: absolute;
+  left: 240px;          /* sidebar width */
+  right: 140px;         /* room for buttons on right */
+  top: 6px;
+  height: 42px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+/* Reveal toolbar on header hover */
+.page-header:hover .hover-toolbar-zone{
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Toolbar container */
+.toolbar{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+
+  border-radius: 999px;
+  background: rgba(30,31,37,0.75);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+}
+
+/* Buttons */
+.tbtn{
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: rgba(231,231,234,0.92);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.tbtn:hover{
+  background: rgba(255,255,255,0.10);
+}
+
+/* Select dropdowns */
+.tselect{
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  color: rgba(231,231,234,0.92);
+  border-radius: 10px;
+  padding: 6px 10px;
+  outline: none;
+}
+
+/* Divider */
+.sep{
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,0.12);
+  margin: 0 6px;
+}
