@@ -9,174 +9,152 @@ const LS = {
 };
 
 const THEMES = ["dark", "notionLight", "graphite", "midnight"];
-
 const $ = (id) => document.getElementById(id);
 
 let graph = null;
 let graphData = { nodes: [], links: [] };
-let selectedNode = null;
 let highlightNodes = new Set();
 let highlightLinks = new Set();
-let hoverNode = null;
+
+// Colors
+const COLORS = {
+  category: "#8b5cf6",      // Purple for categories
+  categoryGlow: "#a78bfa",
+  page: "#f4f4f5",          // White for pages
+  pageHighlight: "#c4b5fd",
+  link: "#7c5cff",
+  linkDim: "rgba(139, 92, 246, 0.2)",
+  bg: "#030305"
+};
 
 /* --------------- Theme --------------- */
 
-function loadTheme(){
+function loadTheme() {
   const t = localStorage.getItem(LS.theme) || "dark";
   setTheme(THEMES.includes(t) ? t : "dark");
 }
 
-function setTheme(theme){
+function setTheme(theme) {
   document.body.setAttribute("data-theme", theme);
   localStorage.setItem(LS.theme, theme);
-  if(graph) updateGraphColors();
 }
 
-function cycleTheme(){
+function cycleTheme() {
   const cur = document.body.getAttribute("data-theme") || "dark";
   const idx = THEMES.indexOf(cur);
   const next = THEMES[(idx + 1) % THEMES.length];
   setTheme(next);
 }
 
-function getThemeColors(){
-  const style = getComputedStyle(document.body);
-  return {
-    bg: style.getPropertyValue("--graph-bg").trim() || "#050608",
-    category: style.getPropertyValue("--node-hub").trim() || "#7c5cff",
-    categoryGlow: style.getPropertyValue("--node-tag").trim() || "#a78bfa",
-    page: style.getPropertyValue("--node-page").trim() || "#e4e4e7",
-    link: style.getPropertyValue("--link-color").trim() || "rgba(124, 92, 255, 0.35)",
-    text: style.getPropertyValue("--text").trim() || "rgba(255,255,255,0.88)",
-  };
-}
+/* --------------- Data --------------- */
 
-/* --------------- Data Loading --------------- */
-
-function loadPages(){
-  try{
+function loadPages() {
+  try {
     const pages = JSON.parse(localStorage.getItem(LS.pages) || "[]");
     return Array.isArray(pages) ? pages : [];
-  }catch{
+  } catch {
     return [];
   }
 }
 
-function buildGraphData(){
+function buildGraphData() {
   const pages = loadPages();
-
-  // Debug: Show what we're loading
-  console.log("All pages loaded:", pages);
-  console.log("Pages inGraph status:", pages.map(p => ({ title: p.title, inGraph: p.inGraph, tags: p.tags })));
-
-  // Filter pages that are in the graph (use truthy check, not strict ===)
   const graphPages = pages.filter(p => p.inGraph);
-  console.log("Pages in graph:", graphPages.length);
+
+  console.log("Building graph from", graphPages.length, "pages");
 
   const nodes = [];
   const links = [];
-  const categorySet = new Set();
-  const categoryPages = {}; // track which pages belong to each category
+  const categories = new Map(); // category name -> page IDs
 
-  // Collect all unique categories (tags)
-  for(const page of graphPages){
+  // First pass: collect all categories and their pages
+  for (const page of graphPages) {
     const tags = page.tags || [];
-    tags.forEach(t => {
-      categorySet.add(t);
-      if(!categoryPages[t]) categoryPages[t] = [];
-      categoryPages[t].push(page.id);
-    });
+    for (const tag of tags) {
+      if (!categories.has(tag)) {
+        categories.set(tag, []);
+      }
+      categories.get(tag).push(page.id);
+    }
   }
 
-  // Create CATEGORY nodes (large, prominent)
-  for(const category of categorySet){
-    const pageCount = categoryPages[category]?.length || 0;
+  console.log("Found categories:", Array.from(categories.keys()));
+
+  // Create CATEGORY nodes
+  for (const [catName, pageIds] of categories) {
     nodes.push({
-      id: `cat:${category}`,
+      id: `cat:${catName}`,
+      name: catName.toUpperCase(),
       type: "category",
-      label: category.toUpperCase(),
-      pageCount: pageCount,
-      // Size based on number of connected pages
-      val: 8 + (pageCount * 2),
+      pageCount: pageIds.length,
+      val: 20 + (pageIds.length * 5), // Larger based on pages
+      color: COLORS.category
     });
   }
 
   // Create PAGE nodes
-  for(const page of graphPages){
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = page.flowHTML || "";
-    const preview = (tempDiv.textContent || "").trim().slice(0, 200);
-
-    const tags = page.tags || [];
+  for (const page of graphPages) {
+    const preview = extractPreview(page.flowHTML);
 
     nodes.push({
       id: `page:${page.id}`,
+      name: page.title || "Untitled",
       type: "page",
-      label: page.title || "Untitled",
       pageId: page.id,
-      tags: tags,
+      tags: page.tags || [],
       preview: preview,
-      val: 3,
+      val: 8,
+      color: COLORS.page
     });
 
-    // Link page to its categories
-    if(tags.length > 0){
-      for(const tag of tags){
+    // Create links from page to its categories
+    const tags = page.tags || [];
+    for (const tag of tags) {
+      links.push({
+        source: `cat:${tag}`,
+        target: `page:${page.id}`,
+        type: "category-page"
+      });
+    }
+  }
+
+  // Create sibling links between pages sharing categories
+  for (const [catName, pageIds] of categories) {
+    for (let i = 0; i < pageIds.length; i++) {
+      for (let j = i + 1; j < pageIds.length; j++) {
         links.push({
-          source: `cat:${tag}`,
-          target: `page:${page.id}`,
-          type: "category-page",
+          source: `page:${pageIds[i]}`,
+          target: `page:${pageIds[j]}`,
+          type: "sibling"
         });
       }
     }
   }
 
-  // Connect pages that share categories (sibling links)
-  for(const category in categoryPages){
-    const pageIds = categoryPages[category];
-    // Create connections between pages in same category
-    for(let i = 0; i < pageIds.length; i++){
-      for(let j = i + 1; j < pageIds.length; j++){
-        // Check if this link already exists
-        const existingLink = links.find(l =>
-          (l.source === `page:${pageIds[i]}` && l.target === `page:${pageIds[j]}`) ||
-          (l.source === `page:${pageIds[j]}` && l.target === `page:${pageIds[i]}`)
-        );
-        if(!existingLink){
-          links.push({
-            source: `page:${pageIds[i]}`,
-            target: `page:${pageIds[j]}`,
-            type: "sibling",
-          });
-        }
-      }
-    }
-  }
-
-  // Handle pages without categories - they float alone
-  // (no hub needed, they just exist in space)
-
+  console.log("Graph built:", nodes.length, "nodes,", links.length, "links");
   return { nodes, links };
 }
 
-/* --------------- Graph Rendering --------------- */
+function extractPreview(html) {
+  if (!html) return "";
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return (div.textContent || "").trim().slice(0, 200);
+}
 
-function createGraph(){
+/* --------------- Graph Creation --------------- */
+
+function createGraph() {
   const container = $("graphContainer");
-  const colors = getThemeColors();
-
   graphData = buildGraphData();
-  console.log("Graph:", graphData.nodes.length, "nodes,", graphData.links.length, "links");
 
-  // Check if no nodes
-  if(graphData.nodes.length === 0){
+  // Empty state
+  if (graphData.nodes.length === 0) {
     container.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:16px;text-align:center;padding:40px;">
-        <div>
-          <div style="font-size:48px;margin-bottom:16px;opacity:0.5;">&#x2B21;</div>
-          <div>No pages in the graph yet.</div>
-          <div style="margin-top:8px;opacity:0.7;font-size:14px;">Go to Notes and click "Add to Graph" on a page.</div>
-        </div>
+      <div class="empty-state">
+        <div class="empty-icon">◇</div>
+        <div class="empty-title">No pages in graph</div>
+        <div class="empty-hint">Go to Notes and click "Add to Graph" on a page, then add categories.</div>
       </div>
     `;
     updateStats();
@@ -185,236 +163,209 @@ function createGraph(){
 
   graph = ForceGraph3D()(container)
     .graphData(graphData)
-    .backgroundColor(colors.bg)
+    .backgroundColor(COLORS.bg)
     .width(container.clientWidth)
     .height(container.clientHeight)
     .showNavInfo(false)
 
-    // === NODE STYLING ===
-    .nodeLabel("")  // We'll use custom labels
-    .nodeVal(node => node.val)
-    .nodeResolution(24)
+    // Node styling
+    .nodeVal(n => n.val)
+    .nodeColor(n => {
+      if (highlightNodes.size > 0) {
+        return highlightNodes.has(n) ? n.color : "rgba(100,100,100,0.3)";
+      }
+      return n.color;
+    })
     .nodeOpacity(1)
+    .nodeResolution(20)
 
-    // Custom 3D objects for nodes
-    .nodeThreeObject(node => createNodeObject(node))
-    .nodeThreeObjectExtend(false)
+    // Labels - use built-in labels
+    .nodeLabel(n => `<div class="node-tooltip ${n.type}">${n.name}</div>`)
 
-    // === LINK STYLING ===
-    .linkWidth(link => {
-      if(highlightLinks.has(link)) return 2;
-      return link.type === "category-page" ? 1.5 : 0.5;
+    // Link styling
+    .linkWidth(l => {
+      if (highlightLinks.has(l)) return 3;
+      return l.type === "category-page" ? 1.5 : 0.5;
     })
-    .linkOpacity(link => {
-      if(highlightLinks.has(link)) return 0.8;
-      return link.type === "category-page" ? 0.4 : 0.15;
+    .linkColor(l => {
+      if (highlightLinks.has(l)) return COLORS.link;
+      return l.type === "category-page" ? COLORS.linkDim : "rgba(255,255,255,0.05)";
     })
-    .linkColor(link => {
-      if(highlightLinks.has(link)) return colors.category;
-      return link.type === "category-page" ? colors.link : "rgba(255,255,255,0.1)";
-    })
-    // Animated particles on links
-    .linkDirectionalParticles(link => highlightLinks.has(link) ? 4 : 0)
+    .linkOpacity(1)
+
+    // Particles on highlighted links
+    .linkDirectionalParticles(l => highlightLinks.has(l) ? 3 : 0)
     .linkDirectionalParticleWidth(2)
-    .linkDirectionalParticleSpeed(0.006)
-    .linkDirectionalParticleColor(() => colors.categoryGlow)
+    .linkDirectionalParticleSpeed(0.008)
+    .linkDirectionalParticleColor(() => COLORS.categoryGlow)
 
-    // === INTERACTIONS ===
+    // Interactions
     .onNodeClick(handleNodeClick)
     .onNodeHover(handleNodeHover)
-    .onBackgroundClick(() => {
-      clearHighlight();
-      hideDetails();
-    })
+    .onBackgroundClick(clearHighlight)
 
-    // === CAMERA ===
-    .cameraPosition({ x: 0, y: 0, z: 250 });
+    // Camera
+    .cameraPosition({ x: 0, y: 0, z: 300 });
 
-  // Configure physics
-  graph.d3Force("charge").strength(-100);
-  graph.d3Force("link")
-    .distance(link => link.type === "category-page" ? 70 : 50)
-    .strength(link => link.type === "category-page" ? 0.6 : 0.2);
+  // Physics
+  graph.d3Force("charge").strength(-150);
+  graph.d3Force("link").distance(l => l.type === "category-page" ? 80 : 50);
   graph.d3Force("center").strength(0.05);
+
+  // Custom node objects with THREE.js
+  graph.nodeThreeObject(node => {
+    const group = new THREE.Group();
+
+    if (node.type === "category") {
+      // === CATEGORY: Large glowing sphere ===
+      const size = Math.cbrt(node.val) * 1.5;
+
+      // Core sphere
+      const geo = new THREE.SphereGeometry(size, 32, 32);
+      const mat = new THREE.MeshBasicMaterial({
+        color: COLORS.category,
+        transparent: true,
+        opacity: 0.9
+      });
+      const sphere = new THREE.Mesh(geo, mat);
+      group.add(sphere);
+
+      // Outer glow
+      const glowGeo = new THREE.SphereGeometry(size * 1.4, 32, 32);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: COLORS.categoryGlow,
+        transparent: true,
+        opacity: 0.2
+      });
+      group.add(new THREE.Mesh(glowGeo, glowMat));
+
+      // Ring
+      const ringGeo = new THREE.RingGeometry(size * 1.6, size * 1.8, 32);
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: COLORS.categoryGlow,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide
+      });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      group.add(ring);
+
+      // Text sprite
+      const sprite = makeTextSprite(node.name, {
+        fontsize: 28,
+        fontface: "Arial Black",
+        borderColor: COLORS.category,
+        backgroundColor: "rgba(139, 92, 246, 0.9)",
+        textColor: "white"
+      });
+      sprite.position.set(0, size + 10, 0);
+      group.add(sprite);
+
+      // Count badge
+      if (node.pageCount > 0) {
+        const badge = makeTextSprite(String(node.pageCount), {
+          fontsize: 22,
+          fontface: "Arial",
+          borderColor: "white",
+          backgroundColor: "rgba(255,255,255,0.95)",
+          textColor: COLORS.category
+        });
+        badge.position.set(0, -(size + 8), 0);
+        group.add(badge);
+      }
+
+    } else {
+      // === PAGE: Small white sphere ===
+      const size = Math.cbrt(node.val) * 1.2;
+      const isHighlighted = highlightNodes.has(node);
+
+      const geo = new THREE.SphereGeometry(size, 16, 16);
+      const mat = new THREE.MeshBasicMaterial({
+        color: isHighlighted ? COLORS.pageHighlight : COLORS.page,
+        transparent: true,
+        opacity: isHighlighted ? 1 : 0.85
+      });
+      group.add(new THREE.Mesh(geo, mat));
+
+      // Always show label for pages
+      const sprite = makeTextSprite(truncate(node.name, 18), {
+        fontsize: 20,
+        fontface: "Arial",
+        borderColor: "transparent",
+        backgroundColor: "rgba(0,0,0,0.7)",
+        textColor: "white"
+      });
+      sprite.position.set(0, size + 6, 0);
+      group.add(sprite);
+
+      // Glow when highlighted
+      if (isHighlighted) {
+        const glowGeo = new THREE.SphereGeometry(size * 2, 16, 16);
+        const glowMat = new THREE.MeshBasicMaterial({
+          color: COLORS.categoryGlow,
+          transparent: true,
+          opacity: 0.25
+        });
+        group.add(new THREE.Mesh(glowGeo, glowMat));
+      }
+    }
+
+    return group;
+  });
 
   updateStats();
 }
 
-function createNodeObject(node){
-  const THREE = window.THREE;
-  const colors = getThemeColors();
-  const isHighlighted = highlightNodes.has(node) || hoverNode === node;
-
-  if(node.type === "category"){
-    // === CATEGORY NODE: Large glowing orb with label ===
-    const group = new THREE.Group();
-
-    // Main sphere
-    const size = Math.sqrt(node.val) * 2;
-    const geometry = new THREE.SphereGeometry(size, 32, 32);
-    const material = new THREE.MeshPhongMaterial({
-      color: colors.category,
-      emissive: colors.category,
-      emissiveIntensity: isHighlighted ? 0.6 : 0.3,
-      transparent: true,
-      opacity: isHighlighted ? 1 : 0.9,
-      shininess: 100,
-    });
-    const sphere = new THREE.Mesh(geometry, material);
-    group.add(sphere);
-
-    // Outer glow ring
-    const ringGeometry = new THREE.RingGeometry(size * 1.3, size * 1.6, 32);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: colors.categoryGlow,
-      transparent: true,
-      opacity: isHighlighted ? 0.4 : 0.15,
-      side: THREE.DoubleSide,
-    });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = Math.PI / 2;
-    group.add(ring);
-
-    // Glow sphere
-    const glowGeometry = new THREE.SphereGeometry(size * 1.4, 16, 16);
-    const glowMaterial = new THREE.MeshBasicMaterial({
-      color: colors.categoryGlow,
-      transparent: true,
-      opacity: isHighlighted ? 0.25 : 0.1,
-    });
-    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-    group.add(glow);
-
-    // Text label using sprite
-    const label = createTextSprite(node.label, {
-      fontSize: 48,
-      fontWeight: "700",
-      color: "#ffffff",
-      backgroundColor: colors.category,
-      padding: 12,
-      borderRadius: 8,
-    });
-    label.position.y = size + 8;
-    label.scale.set(24, 12, 1);
-    group.add(label);
-
-    // Page count badge
-    if(node.pageCount > 0){
-      const countLabel = createTextSprite(`${node.pageCount}`, {
-        fontSize: 36,
-        fontWeight: "600",
-        color: colors.category,
-        backgroundColor: "rgba(255,255,255,0.95)",
-        padding: 8,
-        borderRadius: 20,
-      });
-      countLabel.position.y = -(size + 6);
-      countLabel.scale.set(10, 6, 1);
-      group.add(countLabel);
-    }
-
-    return group;
-
-  } else {
-    // === PAGE NODE: Small dot with label on hover ===
-    const group = new THREE.Group();
-
-    const size = Math.sqrt(node.val) * 1.5;
-    const geometry = new THREE.SphereGeometry(size, 16, 16);
-    const material = new THREE.MeshPhongMaterial({
-      color: isHighlighted ? colors.categoryGlow : colors.page,
-      emissive: isHighlighted ? colors.categoryGlow : 0x000000,
-      emissiveIntensity: isHighlighted ? 0.5 : 0,
-      transparent: true,
-      opacity: isHighlighted ? 1 : 0.85,
-    });
-    const sphere = new THREE.Mesh(geometry, material);
-    group.add(sphere);
-
-    // Show label when highlighted or always for better UX
-    if(isHighlighted || highlightNodes.size === 0){
-      const label = createTextSprite(truncate(node.label, 20), {
-        fontSize: 32,
-        fontWeight: "500",
-        color: "#ffffff",
-        backgroundColor: "rgba(0,0,0,0.75)",
-        padding: 8,
-        borderRadius: 6,
-      });
-      label.position.y = size + 5;
-      label.scale.set(20, 8, 1);
-      group.add(label);
-    }
-
-    // Glow on highlight
-    if(isHighlighted){
-      const glowGeometry = new THREE.SphereGeometry(size * 2, 16, 16);
-      const glowMaterial = new THREE.MeshBasicMaterial({
-        color: colors.categoryGlow,
-        transparent: true,
-        opacity: 0.2,
-      });
-      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-      group.add(glow);
-    }
-
-    return group;
-  }
-}
-
-function createTextSprite(text, options = {}){
-  const {
-    fontSize = 32,
-    fontWeight = "500",
-    color = "#ffffff",
-    backgroundColor = "rgba(0,0,0,0.7)",
-    padding = 8,
-    borderRadius = 6,
-  } = options;
+function makeTextSprite(text, opts = {}) {
+  const fontface = opts.fontface || "Arial";
+  const fontsize = opts.fontsize || 24;
+  const borderColor = opts.borderColor || "white";
+  const backgroundColor = opts.backgroundColor || "rgba(0,0,0,0.8)";
+  const textColor = opts.textColor || "white";
 
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
 
-  // Measure text
-  ctx.font = `${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  ctx.font = `bold ${fontsize}px ${fontface}`;
   const textWidth = ctx.measureText(text).width;
 
-  // Set canvas size
-  const width = textWidth + padding * 2;
-  const height = fontSize + padding * 2;
-  canvas.width = width * 2; // Higher res
-  canvas.height = height * 2;
+  const padding = fontsize * 0.5;
+  canvas.width = textWidth + padding * 2;
+  canvas.height = fontsize + padding * 2;
 
-  // Scale for higher res
-  ctx.scale(2, 2);
-
-  // Draw background
+  // Background
   ctx.fillStyle = backgroundColor;
-  roundRect(ctx, 0, 0, width, height, borderRadius);
+  roundRect(ctx, 0, 0, canvas.width, canvas.height, 8);
   ctx.fill();
 
-  // Draw text
-  ctx.font = `${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-  ctx.fillStyle = color;
+  // Border
+  if (borderColor !== "transparent") {
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 2;
+    roundRect(ctx, 1, 1, canvas.width - 2, canvas.height - 2, 7);
+    ctx.stroke();
+  }
+
+  // Text
+  ctx.font = `bold ${fontsize}px ${fontface}`;
+  ctx.fillStyle = textColor;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, width / 2, height / 2);
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
-  // Create sprite
-  const THREE = window.THREE;
   const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: false,
+    depthTest: false
   });
   const sprite = new THREE.Sprite(material);
+  sprite.scale.set(canvas.width / 8, canvas.height / 8, 1);
 
   return sprite;
 }
 
-function roundRect(ctx, x, y, w, h, r){
+function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
@@ -428,76 +379,41 @@ function roundRect(ctx, x, y, w, h, r){
   ctx.closePath();
 }
 
-function truncate(str, len){
-  if(!str) return "";
-  return str.length > len ? str.slice(0, len) + "..." : str;
+function truncate(s, len) {
+  if (!s) return "";
+  return s.length > len ? s.slice(0, len) + "…" : s;
 }
 
-function updateGraphColors(){
-  if(!graph) return;
-  const colors = getThemeColors();
-  graph.backgroundColor(colors.bg);
-  // Re-render nodes to update colors
-  graph.nodeThreeObject(node => createNodeObject(node));
-}
-
-function updateStats(){
+function updateStats() {
   $("nodeCount").textContent = graphData.nodes.length;
   $("linkCount").textContent = graphData.links.length;
 }
 
-/* --------------- Highlight System --------------- */
-
-function clearHighlight(){
-  highlightNodes.clear();
-  highlightLinks.clear();
-  hoverNode = null;
-  updateHighlight();
-}
-
-function updateHighlight(){
-  if(!graph) return;
-
-  // Update node visuals
-  graph.nodeThreeObject(node => createNodeObject(node));
-
-  // Update link visuals
-  graph.linkWidth(graph.linkWidth());
-  graph.linkOpacity(graph.linkOpacity());
-  graph.linkColor(graph.linkColor());
-  graph.linkDirectionalParticles(graph.linkDirectionalParticles());
-}
-
 /* --------------- Interactions --------------- */
 
-function handleNodeClick(node){
-  if(!node) return;
+function handleNodeClick(node) {
+  if (!node) return;
 
-  // Highlight this node and connected nodes
   highlightNodes.clear();
   highlightLinks.clear();
-
   highlightNodes.add(node);
 
-  // Find connected nodes and links
+  // Find connected nodes
   graphData.links.forEach(link => {
-    const sourceId = typeof link.source === "object" ? link.source.id : link.source;
-    const targetId = typeof link.target === "object" ? link.target.id : link.target;
+    const src = typeof link.source === "object" ? link.source.id : link.source;
+    const tgt = typeof link.target === "object" ? link.target.id : link.target;
 
-    if(sourceId === node.id || targetId === node.id){
+    if (src === node.id || tgt === node.id) {
       highlightLinks.add(link);
-      // Add connected node
-      const connectedNode = graphData.nodes.find(n =>
-        n.id === (sourceId === node.id ? targetId : sourceId)
-      );
-      if(connectedNode) highlightNodes.add(connectedNode);
+      const other = graphData.nodes.find(n => n.id === (src === node.id ? tgt : src));
+      if (other) highlightNodes.add(other);
     }
   });
 
-  updateHighlight();
+  refreshGraph();
 
-  if(node.type === "page"){
-    showDetails(node);
+  if (node.type === "page") {
+    showPageDetails(node);
   } else {
     showCategoryDetails(node);
   }
@@ -505,129 +421,106 @@ function handleNodeClick(node){
   focusNode(node);
 }
 
-function handleNodeHover(node){
+function handleNodeHover(node) {
   document.body.style.cursor = node ? "pointer" : "default";
-
-  if(node !== hoverNode){
-    hoverNode = node;
-    // Only update if not in click-highlight mode
-    if(highlightNodes.size === 0){
-      updateHighlight();
-    }
-  }
 }
 
-function focusNode(node){
-  if(!graph || !node) return;
+function clearHighlight() {
+  highlightNodes.clear();
+  highlightLinks.clear();
+  refreshGraph();
+  hideDetails();
+}
 
-  const distance = 100;
-  const distRatio = 1 + distance / Math.hypot(node.x || 0, node.y || 0, node.z || 0);
+function refreshGraph() {
+  if (!graph) return;
+  graph.nodeColor(graph.nodeColor());
+  graph.linkWidth(graph.linkWidth());
+  graph.linkColor(graph.linkColor());
+  graph.linkDirectionalParticles(graph.linkDirectionalParticles());
+  graph.nodeThreeObject(graph.nodeThreeObject());
+}
 
+function focusNode(node) {
+  if (!graph || !node) return;
+  const dist = 120;
+  const ratio = 1 + dist / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
   graph.cameraPosition(
-    {
-      x: (node.x || 0) * distRatio,
-      y: (node.y || 0) * distRatio,
-      z: (node.z || 0) * distRatio,
-    },
+    { x: (node.x || 0) * ratio, y: (node.y || 0) * ratio, z: (node.z || 0) * ratio },
     node,
     1000
   );
 }
 
-function resetView(){
-  if(!graph) return;
+function resetView() {
   clearHighlight();
-  graph.cameraPosition({ x: 0, y: 0, z: 250 }, null, 1000);
+  if (graph) graph.cameraPosition({ x: 0, y: 0, z: 300 }, null, 1000);
 }
 
 /* --------------- Details Panel --------------- */
 
-function showDetails(node){
-  const panel = $("detailsPanel");
-  const title = $("detailsTitle");
-  const tags = $("detailsTags");
-  const preview = $("detailsPreview");
+function showPageDetails(node) {
+  $("detailsTitle").textContent = node.name;
+
+  const tagsEl = $("detailsTags");
+  tagsEl.innerHTML = "";
+  (node.tags || []).forEach(tag => {
+    const el = document.createElement("span");
+    el.className = "details-tag";
+    el.textContent = tag;
+    el.style.cursor = "pointer";
+    el.onclick = () => {
+      const catNode = graphData.nodes.find(n => n.id === `cat:${tag}`);
+      if (catNode) handleNodeClick(catNode);
+    };
+    tagsEl.appendChild(el);
+  });
+
+  $("detailsPreview").textContent = node.preview || "No preview available.";
+
   const link = $("detailsLink");
-
-  title.textContent = node.label || "Untitled";
-
-  // Render tags
-  tags.innerHTML = "";
-  if(node.tags && node.tags.length > 0){
-    node.tags.forEach(tag => {
-      const el = document.createElement("span");
-      el.className = "details-tag";
-      el.textContent = tag;
-      el.onclick = () => {
-        // Find and click the category node
-        const catNode = graphData.nodes.find(n => n.id === `cat:${tag}`);
-        if(catNode) handleNodeClick(catNode);
-      };
-      el.style.cursor = "pointer";
-      tags.appendChild(el);
-    });
-  }
-
-  preview.textContent = node.preview || "No content preview available.";
-
-  link.href = "#";
+  link.textContent = "Open Page";
   link.onclick = (e) => {
     e.preventDefault();
-    navigateToPage(node.pageId);
+    localStorage.setItem("ultrase7en_notion_active_v2", node.pageId);
+    window.location.href = "/notion.html";
   };
-  link.textContent = "Open Page";
 
-  panel.classList.remove("hidden");
+  $("detailsPanel").classList.remove("hidden");
 }
 
-function showCategoryDetails(node){
-  const panel = $("detailsPanel");
-  const title = $("detailsTitle");
-  const tags = $("detailsTags");
-  const preview = $("detailsPreview");
-  const link = $("detailsLink");
+function showCategoryDetails(node) {
+  $("detailsTitle").textContent = `📁 ${node.name}`;
+  $("detailsTags").innerHTML = "";
 
-  title.textContent = `Category: ${node.label}`;
-  tags.innerHTML = "";
-
-  // Find all pages in this category
-  const categoryPages = graphData.nodes.filter(n =>
-    n.type === "page" && n.tags && n.tags.includes(node.label.toLowerCase())
+  const pages = graphData.nodes.filter(n =>
+    n.type === "page" && n.tags?.includes(node.name.toLowerCase())
   );
 
-  if(categoryPages.length > 0){
-    preview.innerHTML = `<strong>${categoryPages.length} page${categoryPages.length > 1 ? "s" : ""}:</strong><br><br>` +
-      categoryPages.map(p => `• ${p.label}`).join("<br>");
-  } else {
-    preview.textContent = "No pages in this category.";
-  }
+  $("detailsPreview").innerHTML = pages.length > 0
+    ? `<strong>${pages.length} page${pages.length > 1 ? "s" : ""}:</strong><br><br>` +
+      pages.map(p => `• ${p.name}`).join("<br>")
+    : "No pages in this category.";
 
-  link.href = "#";
+  const link = $("detailsLink");
+  link.textContent = "Reset View";
   link.onclick = (e) => {
     e.preventDefault();
     resetView();
   };
-  link.textContent = "Reset View";
 
-  panel.classList.remove("hidden");
+  $("detailsPanel").classList.remove("hidden");
 }
 
-function hideDetails(){
+function hideDetails() {
   $("detailsPanel").classList.add("hidden");
-  selectedNode = null;
-}
-
-function navigateToPage(pageId){
-  localStorage.setItem("ultrase7en_notion_active_v2", pageId);
-  window.location.href = "/notion.html";
 }
 
 /* --------------- Search --------------- */
 
-function handleSearch(query){
-  const q = query.trim().toLowerCase();
-
-  if(!q){
+function handleSearch(q) {
+  q = q.trim().toLowerCase();
+  if (!q) {
     clearHighlight();
     return;
   }
@@ -636,48 +529,37 @@ function handleSearch(query){
   highlightLinks.clear();
 
   graphData.nodes.forEach(node => {
-    const label = (node.label || "").toLowerCase();
+    const name = (node.name || "").toLowerCase();
     const tags = (node.tags || []).join(" ").toLowerCase();
-    if(label.includes(q) || tags.includes(q)){
+    if (name.includes(q) || tags.includes(q)) {
       highlightNodes.add(node);
     }
   });
 
-  updateHighlight();
-}
-
-/* --------------- Wiring --------------- */
-
-function wire(){
-  $("themeBtn").addEventListener("click", cycleTheme);
-  $("resetBtn").addEventListener("click", resetView);
-  $("detailsClose").addEventListener("click", () => {
-    hideDetails();
-    clearHighlight();
-  });
-
-  $("graphSearch").addEventListener("input", (e) => {
-    handleSearch(e.target.value);
-  });
-
-  window.addEventListener("resize", () => {
-    if(!graph) return;
-    const container = $("graphContainer");
-    graph.width(container.clientWidth);
-    graph.height(container.clientHeight);
-  });
-
-  window.addEventListener("keydown", (e) => {
-    if(e.key === "Escape"){
-      hideDetails();
-      clearHighlight();
-    }
-  });
+  refreshGraph();
 }
 
 /* --------------- Init --------------- */
 
-(function boot(){
+function wire() {
+  $("themeBtn").addEventListener("click", cycleTheme);
+  $("resetBtn").addEventListener("click", resetView);
+  $("detailsClose").addEventListener("click", () => { hideDetails(); clearHighlight(); });
+  $("graphSearch").addEventListener("input", e => handleSearch(e.target.value));
+
+  window.addEventListener("resize", () => {
+    if (graph) {
+      graph.width($("graphContainer").clientWidth);
+      graph.height($("graphContainer").clientHeight);
+    }
+  });
+
+  window.addEventListener("keydown", e => {
+    if (e.key === "Escape") { hideDetails(); clearHighlight(); }
+  });
+}
+
+(function boot() {
   loadTheme();
   wire();
   createGraph();
