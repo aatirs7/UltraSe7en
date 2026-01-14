@@ -65,7 +65,11 @@ function loadPages(){
 
 function buildGraphData(){
   const pages = loadPages();
-  const graphPages = pages.filter(p => p.inGraph);
+  console.log("All pages:", pages);
+  console.log("Pages with inGraph:", pages.map(p => ({ title: p.title, inGraph: p.inGraph })));
+
+  const graphPages = pages.filter(p => p.inGraph === true);
+  console.log("Filtered graph pages:", graphPages);
 
   const nodes = [];
   const links = [];
@@ -174,68 +178,39 @@ function createGraph(){
 
   graphData = buildGraphData();
 
+  // Debug: log what we're rendering
+  console.log("Graph data:", graphData);
+  console.log("Nodes:", graphData.nodes.length, "Links:", graphData.links.length);
+
   graph = ForceGraph3D()(container)
     .graphData(graphData)
     .backgroundColor(colors.bg)
     .width(container.clientWidth)
     .height(container.clientHeight)
-    // Node appearance
+    // Node appearance - use simple built-in rendering first
     .nodeLabel(node => node.label)
-    .nodeVal(node => node.size)
+    .nodeVal(node => node.size * 2)
     .nodeColor(node => {
       const c = getThemeColors();
       if(node.type === "hub") return c.hub;
       if(node.type === "tag") return c.tag;
       return c.page;
     })
-    .nodeOpacity(0.92)
+    .nodeOpacity(0.95)
     .nodeResolution(16)
-    // Node 3D object (spheres with glow for hub/tags)
-    .nodeThreeObject(node => {
-      const c = getThemeColors();
-      const THREE = window.THREE;
-
-      // Create sphere
-      const geometry = new THREE.SphereGeometry(node.size, 16, 16);
-      let color;
-      if(node.type === "hub") color = c.hub;
-      else if(node.type === "tag") color = c.tag;
-      else color = c.page;
-
-      const material = new THREE.MeshLambertMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.92,
-      });
-
-      const sphere = new THREE.Mesh(geometry, material);
-
-      // Add glow for hub and tags
-      if(node.type === "hub" || node.type === "tag"){
-        const glowGeometry = new THREE.SphereGeometry(node.size * 1.5, 16, 16);
-        const glowMaterial = new THREE.MeshBasicMaterial({
-          color: color,
-          transparent: true,
-          opacity: 0.15,
-        });
-        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-        sphere.add(glow);
-      }
-
-      return sphere;
-    })
     // Link appearance
     .linkWidth(link => link.kind === "backbone" ? 2 : link.kind === "sibling" ? 0.5 : 1)
-    .linkOpacity(0.4)
+    .linkOpacity(0.5)
     .linkColor(() => getThemeColors().link)
-    // Forces
-    .d3Force("charge").strength(node => node.type === "hub" ? -400 : node.type === "tag" ? -200 : -80)
-    .d3Force("link").distance(link => link.kind === "backbone" ? 100 : link.kind === "sibling" ? 60 : 50)
     // Interactions
     .onNodeClick(handleNodeClick)
     .onNodeHover(handleNodeHover)
-    // Camera
-    .cameraPosition({ x: 0, y: 0, z: 400 });
+    // Camera - start closer
+    .cameraPosition({ x: 0, y: 0, z: 300 });
+
+  // Configure forces separately (can't chain after d3Force)
+  graph.d3Force("charge").strength(-120);
+  graph.d3Force("link").distance(60);
 
   // Keep slow rotation for ambience
   let angle = 0;
