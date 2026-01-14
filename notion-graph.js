@@ -231,14 +231,11 @@ function createGraph(){
     .cameraPosition({ x: 0, y: 0, z: 250 });
 
   // Configure physics
-  graph.d3Force("charge").strength(-80);
+  graph.d3Force("charge").strength(-100);
   graph.d3Force("link")
-    .distance(link => link.type === "category-page" ? 60 : 40)
-    .strength(link => link.type === "category-page" ? 0.7 : 0.3);
+    .distance(link => link.type === "category-page" ? 70 : 50)
+    .strength(link => link.type === "category-page" ? 0.6 : 0.2);
   graph.d3Force("center").strength(0.05);
-
-  // Add collision to prevent overlap
-  graph.d3Force("collide", d3.forceCollide(node => Math.sqrt(node.val) * 4));
 
   updateStats();
 }
