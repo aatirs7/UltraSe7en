@@ -64,7 +64,14 @@ function loadPages(){
 
 function buildGraphData(){
   const pages = loadPages();
-  const graphPages = pages.filter(p => p.inGraph === true);
+
+  // Debug: Show what we're loading
+  console.log("All pages loaded:", pages);
+  console.log("Pages inGraph status:", pages.map(p => ({ title: p.title, inGraph: p.inGraph, tags: p.tags })));
+
+  // Filter pages that are in the graph (use truthy check, not strict ===)
+  const graphPages = pages.filter(p => p.inGraph);
+  console.log("Pages in graph:", graphPages.length);
 
   const nodes = [];
   const links = [];
