@@ -1,7 +1,6 @@
 /**
  * 3D Knowledge Graph for UltraSe7en Notion Pages
- * Uses 3d-force-graph library (built on Three.js)
- * Obsidian-style visualization
+ * Obsidian-inspired visualization
  */
 
 const LS = {
@@ -16,6 +15,9 @@ const $ = (id) => document.getElementById(id);
 let graph = null;
 let graphData = { nodes: [], links: [] };
 let selectedNode = null;
+let highlightNodes = new Set();
+let highlightLinks = new Set();
+let hoverNode = null;
 
 /* --------------- Theme --------------- */
 
@@ -27,11 +29,7 @@ function loadTheme(){
 function setTheme(theme){
   document.body.setAttribute("data-theme", theme);
   localStorage.setItem(LS.theme, theme);
-
-  // Update graph colors if exists
-  if(graph){
-    updateGraphColors();
-  }
+  if(graph) updateGraphColors();
 }
 
 function cycleTheme(){
@@ -45,10 +43,11 @@ function getThemeColors(){
   const style = getComputedStyle(document.body);
   return {
     bg: style.getPropertyValue("--graph-bg").trim() || "#050608",
-    hub: style.getPropertyValue("--node-hub").trim() || "#7c5cff",
-    tag: style.getPropertyValue("--node-tag").trim() || "#a78bfa",
+    category: style.getPropertyValue("--node-hub").trim() || "#7c5cff",
+    categoryGlow: style.getPropertyValue("--node-tag").trim() || "#a78bfa",
     page: style.getPropertyValue("--node-page").trim() || "#e4e4e7",
     link: style.getPropertyValue("--link-color").trim() || "rgba(124, 92, 255, 0.35)",
+    text: style.getPropertyValue("--text").trim() || "rgba(255,255,255,0.88)",
   };
 }
 
@@ -65,107 +64,90 @@ function loadPages(){
 
 function buildGraphData(){
   const pages = loadPages();
-  console.log("All pages:", pages);
-  console.log("Pages with inGraph:", pages.map(p => ({ title: p.title, inGraph: p.inGraph })));
-
   const graphPages = pages.filter(p => p.inGraph === true);
-  console.log("Filtered graph pages:", graphPages);
 
   const nodes = [];
   const links = [];
-  const tagSet = new Set();
+  const categorySet = new Set();
+  const categoryPages = {}; // track which pages belong to each category
 
-  // Hub node (center of the graph)
-  nodes.push({
-    id: "__HUB__",
-    type: "hub",
-    label: "NOTES",
-    size: 12,
-  });
-
-  // Collect all unique tags
+  // Collect all unique categories (tags)
   for(const page of graphPages){
     const tags = page.tags || [];
-    tags.forEach(t => tagSet.add(t));
+    tags.forEach(t => {
+      categorySet.add(t);
+      if(!categoryPages[t]) categoryPages[t] = [];
+      categoryPages[t].push(page.id);
+    });
   }
 
-  // Create tag nodes
-  for(const tag of tagSet){
+  // Create CATEGORY nodes (large, prominent)
+  for(const category of categorySet){
+    const pageCount = categoryPages[category]?.length || 0;
     nodes.push({
-      id: `tag:${tag}`,
-      type: "tag",
-      label: tag.toUpperCase(),
-      size: 6,
-    });
-
-    // Link tag to hub
-    links.push({
-      source: "__HUB__",
-      target: `tag:${tag}`,
-      kind: "backbone",
+      id: `cat:${category}`,
+      type: "category",
+      label: category.toUpperCase(),
+      pageCount: pageCount,
+      // Size based on number of connected pages
+      val: 8 + (pageCount * 2),
     });
   }
 
-  // Create page nodes
+  // Create PAGE nodes
   for(const page of graphPages){
-    // Extract preview text from flowHTML
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = page.flowHTML || "";
     const preview = (tempDiv.textContent || "").trim().slice(0, 200);
+
+    const tags = page.tags || [];
 
     nodes.push({
       id: `page:${page.id}`,
       type: "page",
       label: page.title || "Untitled",
       pageId: page.id,
-      tags: page.tags || [],
+      tags: tags,
       preview: preview,
-      size: 4,
+      val: 3,
     });
 
-    const tags = page.tags || [];
-
+    // Link page to its categories
     if(tags.length > 0){
-      // Link page to its tags
       for(const tag of tags){
         links.push({
-          source: `tag:${tag}`,
+          source: `cat:${tag}`,
           target: `page:${page.id}`,
-          kind: "entry",
-        });
-      }
-    }else{
-      // Link directly to hub if no tags
-      links.push({
-        source: "__HUB__",
-        target: `page:${page.id}`,
-        kind: "entry",
-      });
-    }
-  }
-
-  // Add links between pages that share tags (for better clustering)
-  const pagesByTag = {};
-  for(const page of graphPages){
-    for(const tag of (page.tags || [])){
-      if(!pagesByTag[tag]) pagesByTag[tag] = [];
-      pagesByTag[tag].push(page.id);
-    }
-  }
-
-  // Connect pages within same tag (limit to prevent too many links)
-  for(const tag in pagesByTag){
-    const pageIds = pagesByTag[tag];
-    for(let i = 0; i < pageIds.length && i < 5; i++){
-      for(let j = i + 1; j < pageIds.length && j < i + 3; j++){
-        links.push({
-          source: `page:${pageIds[i]}`,
-          target: `page:${pageIds[j]}`,
-          kind: "sibling",
+          type: "category-page",
         });
       }
     }
   }
+
+  // Connect pages that share categories (sibling links)
+  for(const category in categoryPages){
+    const pageIds = categoryPages[category];
+    // Create connections between pages in same category
+    for(let i = 0; i < pageIds.length; i++){
+      for(let j = i + 1; j < pageIds.length; j++){
+        // Check if this link already exists
+        const existingLink = links.find(l =>
+          (l.source === `page:${pageIds[i]}` && l.target === `page:${pageIds[j]}`) ||
+          (l.source === `page:${pageIds[j]}` && l.target === `page:${pageIds[i]}`)
+        );
+        if(!existingLink){
+          links.push({
+            source: `page:${pageIds[i]}`,
+            target: `page:${pageIds[j]}`,
+            type: "sibling",
+          });
+        }
+      }
+    }
+  }
+
+  // Handle pages without categories - they float alone
+  // (no hub needed, they just exist in space)
 
   return { nodes, links };
 }
@@ -177,69 +159,282 @@ function createGraph(){
   const colors = getThemeColors();
 
   graphData = buildGraphData();
+  console.log("Graph:", graphData.nodes.length, "nodes,", graphData.links.length, "links");
 
-  // Debug: log what we're rendering
-  console.log("Graph data:", graphData);
-  console.log("Nodes:", graphData.nodes.length, "Links:", graphData.links.length);
+  // Check if no nodes
+  if(graphData.nodes.length === 0){
+    container.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:16px;text-align:center;padding:40px;">
+        <div>
+          <div style="font-size:48px;margin-bottom:16px;opacity:0.5;">&#x2B21;</div>
+          <div>No pages in the graph yet.</div>
+          <div style="margin-top:8px;opacity:0.7;font-size:14px;">Go to Notes and click "Add to Graph" on a page.</div>
+        </div>
+      </div>
+    `;
+    updateStats();
+    return;
+  }
 
   graph = ForceGraph3D()(container)
     .graphData(graphData)
     .backgroundColor(colors.bg)
     .width(container.clientWidth)
     .height(container.clientHeight)
-    // Node appearance - use simple built-in rendering first
-    .nodeLabel(node => node.label)
-    .nodeVal(node => node.size * 2)
-    .nodeColor(node => {
-      const c = getThemeColors();
-      if(node.type === "hub") return c.hub;
-      if(node.type === "tag") return c.tag;
-      return c.page;
+    .showNavInfo(false)
+
+    // === NODE STYLING ===
+    .nodeLabel("")  // We'll use custom labels
+    .nodeVal(node => node.val)
+    .nodeResolution(24)
+    .nodeOpacity(1)
+
+    // Custom 3D objects for nodes
+    .nodeThreeObject(node => createNodeObject(node))
+    .nodeThreeObjectExtend(false)
+
+    // === LINK STYLING ===
+    .linkWidth(link => {
+      if(highlightLinks.has(link)) return 2;
+      return link.type === "category-page" ? 1.5 : 0.5;
     })
-    .nodeOpacity(0.95)
-    .nodeResolution(16)
-    // Link appearance
-    .linkWidth(link => link.kind === "backbone" ? 2 : link.kind === "sibling" ? 0.5 : 1)
-    .linkOpacity(0.5)
-    .linkColor(() => getThemeColors().link)
-    // Interactions
+    .linkOpacity(link => {
+      if(highlightLinks.has(link)) return 0.8;
+      return link.type === "category-page" ? 0.4 : 0.15;
+    })
+    .linkColor(link => {
+      if(highlightLinks.has(link)) return colors.category;
+      return link.type === "category-page" ? colors.link : "rgba(255,255,255,0.1)";
+    })
+    // Animated particles on links
+    .linkDirectionalParticles(link => highlightLinks.has(link) ? 4 : 0)
+    .linkDirectionalParticleWidth(2)
+    .linkDirectionalParticleSpeed(0.006)
+    .linkDirectionalParticleColor(() => colors.categoryGlow)
+
+    // === INTERACTIONS ===
     .onNodeClick(handleNodeClick)
     .onNodeHover(handleNodeHover)
-    // Camera - start closer
-    .cameraPosition({ x: 0, y: 0, z: 300 });
+    .onBackgroundClick(() => {
+      clearHighlight();
+      hideDetails();
+    })
 
-  // Configure forces separately (can't chain after d3Force)
-  graph.d3Force("charge").strength(-120);
-  graph.d3Force("link").distance(60);
+    // === CAMERA ===
+    .cameraPosition({ x: 0, y: 0, z: 250 });
 
-  // Keep slow rotation for ambience
-  let angle = 0;
-  function rotate(){
-    if(!graph) return;
-    angle += 0.001;
-    const dist = 400;
-    graph.cameraPosition({
-      x: dist * Math.sin(angle),
-      z: dist * Math.cos(angle),
-    });
-    requestAnimationFrame(rotate);
-  }
-  // Uncomment to enable auto-rotation:
-  // rotate();
+  // Configure physics
+  graph.d3Force("charge").strength(-80);
+  graph.d3Force("link")
+    .distance(link => link.type === "category-page" ? 60 : 40)
+    .strength(link => link.type === "category-page" ? 0.7 : 0.3);
+  graph.d3Force("center").strength(0.05);
+
+  // Add collision to prevent overlap
+  graph.d3Force("collide", d3.forceCollide(node => Math.sqrt(node.val) * 4));
 
   updateStats();
+}
+
+function createNodeObject(node){
+  const THREE = window.THREE;
+  const colors = getThemeColors();
+  const isHighlighted = highlightNodes.has(node) || hoverNode === node;
+
+  if(node.type === "category"){
+    // === CATEGORY NODE: Large glowing orb with label ===
+    const group = new THREE.Group();
+
+    // Main sphere
+    const size = Math.sqrt(node.val) * 2;
+    const geometry = new THREE.SphereGeometry(size, 32, 32);
+    const material = new THREE.MeshPhongMaterial({
+      color: colors.category,
+      emissive: colors.category,
+      emissiveIntensity: isHighlighted ? 0.6 : 0.3,
+      transparent: true,
+      opacity: isHighlighted ? 1 : 0.9,
+      shininess: 100,
+    });
+    const sphere = new THREE.Mesh(geometry, material);
+    group.add(sphere);
+
+    // Outer glow ring
+    const ringGeometry = new THREE.RingGeometry(size * 1.3, size * 1.6, 32);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: colors.categoryGlow,
+      transparent: true,
+      opacity: isHighlighted ? 0.4 : 0.15,
+      side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.rotation.x = Math.PI / 2;
+    group.add(ring);
+
+    // Glow sphere
+    const glowGeometry = new THREE.SphereGeometry(size * 1.4, 16, 16);
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: colors.categoryGlow,
+      transparent: true,
+      opacity: isHighlighted ? 0.25 : 0.1,
+    });
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+    group.add(glow);
+
+    // Text label using sprite
+    const label = createTextSprite(node.label, {
+      fontSize: 48,
+      fontWeight: "700",
+      color: "#ffffff",
+      backgroundColor: colors.category,
+      padding: 12,
+      borderRadius: 8,
+    });
+    label.position.y = size + 8;
+    label.scale.set(24, 12, 1);
+    group.add(label);
+
+    // Page count badge
+    if(node.pageCount > 0){
+      const countLabel = createTextSprite(`${node.pageCount}`, {
+        fontSize: 36,
+        fontWeight: "600",
+        color: colors.category,
+        backgroundColor: "rgba(255,255,255,0.95)",
+        padding: 8,
+        borderRadius: 20,
+      });
+      countLabel.position.y = -(size + 6);
+      countLabel.scale.set(10, 6, 1);
+      group.add(countLabel);
+    }
+
+    return group;
+
+  } else {
+    // === PAGE NODE: Small dot with label on hover ===
+    const group = new THREE.Group();
+
+    const size = Math.sqrt(node.val) * 1.5;
+    const geometry = new THREE.SphereGeometry(size, 16, 16);
+    const material = new THREE.MeshPhongMaterial({
+      color: isHighlighted ? colors.categoryGlow : colors.page,
+      emissive: isHighlighted ? colors.categoryGlow : 0x000000,
+      emissiveIntensity: isHighlighted ? 0.5 : 0,
+      transparent: true,
+      opacity: isHighlighted ? 1 : 0.85,
+    });
+    const sphere = new THREE.Mesh(geometry, material);
+    group.add(sphere);
+
+    // Show label when highlighted or always for better UX
+    if(isHighlighted || highlightNodes.size === 0){
+      const label = createTextSprite(truncate(node.label, 20), {
+        fontSize: 32,
+        fontWeight: "500",
+        color: "#ffffff",
+        backgroundColor: "rgba(0,0,0,0.75)",
+        padding: 8,
+        borderRadius: 6,
+      });
+      label.position.y = size + 5;
+      label.scale.set(20, 8, 1);
+      group.add(label);
+    }
+
+    // Glow on highlight
+    if(isHighlighted){
+      const glowGeometry = new THREE.SphereGeometry(size * 2, 16, 16);
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        color: colors.categoryGlow,
+        transparent: true,
+        opacity: 0.2,
+      });
+      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+      group.add(glow);
+    }
+
+    return group;
+  }
+}
+
+function createTextSprite(text, options = {}){
+  const {
+    fontSize = 32,
+    fontWeight = "500",
+    color = "#ffffff",
+    backgroundColor = "rgba(0,0,0,0.7)",
+    padding = 8,
+    borderRadius = 6,
+  } = options;
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  // Measure text
+  ctx.font = `${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  const textWidth = ctx.measureText(text).width;
+
+  // Set canvas size
+  const width = textWidth + padding * 2;
+  const height = fontSize + padding * 2;
+  canvas.width = width * 2; // Higher res
+  canvas.height = height * 2;
+
+  // Scale for higher res
+  ctx.scale(2, 2);
+
+  // Draw background
+  ctx.fillStyle = backgroundColor;
+  roundRect(ctx, 0, 0, width, height, borderRadius);
+  ctx.fill();
+
+  // Draw text
+  ctx.font = `${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, width / 2, height / 2);
+
+  // Create sprite
+  const THREE = window.THREE;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+  });
+  const sprite = new THREE.Sprite(material);
+
+  return sprite;
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function truncate(str, len){
+  if(!str) return "";
+  return str.length > len ? str.slice(0, len) + "..." : str;
 }
 
 function updateGraphColors(){
   if(!graph) return;
   const colors = getThemeColors();
   graph.backgroundColor(colors.bg);
-  graph.nodeColor(node => {
-    if(node.type === "hub") return colors.hub;
-    if(node.type === "tag") return colors.tag;
-    return colors.page;
-  });
-  graph.linkColor(() => colors.link);
+  // Re-render nodes to update colors
+  graph.nodeThreeObject(node => createNodeObject(node));
 }
 
 function updateStats(){
@@ -247,35 +442,81 @@ function updateStats(){
   $("linkCount").textContent = graphData.links.length;
 }
 
+/* --------------- Highlight System --------------- */
+
+function clearHighlight(){
+  highlightNodes.clear();
+  highlightLinks.clear();
+  hoverNode = null;
+  updateHighlight();
+}
+
+function updateHighlight(){
+  if(!graph) return;
+
+  // Update node visuals
+  graph.nodeThreeObject(node => createNodeObject(node));
+
+  // Update link visuals
+  graph.linkWidth(graph.linkWidth());
+  graph.linkOpacity(graph.linkOpacity());
+  graph.linkColor(graph.linkColor());
+  graph.linkDirectionalParticles(graph.linkDirectionalParticles());
+}
+
 /* --------------- Interactions --------------- */
 
 function handleNodeClick(node){
   if(!node) return;
 
-  selectedNode = node;
+  // Highlight this node and connected nodes
+  highlightNodes.clear();
+  highlightLinks.clear();
+
+  highlightNodes.add(node);
+
+  // Find connected nodes and links
+  graphData.links.forEach(link => {
+    const sourceId = typeof link.source === "object" ? link.source.id : link.source;
+    const targetId = typeof link.target === "object" ? link.target.id : link.target;
+
+    if(sourceId === node.id || targetId === node.id){
+      highlightLinks.add(link);
+      // Add connected node
+      const connectedNode = graphData.nodes.find(n =>
+        n.id === (sourceId === node.id ? targetId : sourceId)
+      );
+      if(connectedNode) highlightNodes.add(connectedNode);
+    }
+  });
+
+  updateHighlight();
 
   if(node.type === "page"){
     showDetails(node);
-    focusNode(node);
-  }else if(node.type === "tag"){
-    // Focus on tag and highlight connected pages
-    focusNode(node);
-    hideDetails();
-  }else{
-    // Hub - reset view
-    resetView();
-    hideDetails();
+  } else {
+    showCategoryDetails(node);
   }
+
+  focusNode(node);
 }
 
 function handleNodeHover(node){
   document.body.style.cursor = node ? "pointer" : "default";
+
+  if(node !== hoverNode){
+    hoverNode = node;
+    // Only update if not in click-highlight mode
+    if(highlightNodes.size === 0){
+      updateHighlight();
+    }
+  }
 }
 
 function focusNode(node){
   if(!graph || !node) return;
 
-  const distance = 120;
+  const distance = 100;
   const distRatio = 1 + distance / Math.hypot(node.x || 0, node.y || 0, node.z || 0);
 
   graph.cameraPosition(
@@ -285,13 +526,14 @@ function focusNode(node){
       z: (node.z || 0) * distRatio,
     },
     node,
-    1500
+    1000
   );
 }
 
 function resetView(){
   if(!graph) return;
-  graph.cameraPosition({ x: 0, y: 0, z: 400 }, null, 1000);
+  clearHighlight();
+  graph.cameraPosition({ x: 0, y: 0, z: 250 }, null, 1000);
 }
 
 /* --------------- Details Panel --------------- */
@@ -312,19 +554,56 @@ function showDetails(node){
       const el = document.createElement("span");
       el.className = "details-tag";
       el.textContent = tag;
+      el.onclick = () => {
+        // Find and click the category node
+        const catNode = graphData.nodes.find(n => n.id === `cat:${tag}`);
+        if(catNode) handleNodeClick(catNode);
+      };
+      el.style.cursor = "pointer";
       tags.appendChild(el);
     });
   }
 
-  // Preview
   preview.textContent = node.preview || "No content preview available.";
 
-  // Link to page
-  link.href = `/notion.html?page=${node.pageId}`;
+  link.href = "#";
   link.onclick = (e) => {
     e.preventDefault();
     navigateToPage(node.pageId);
   };
+  link.textContent = "Open Page";
+
+  panel.classList.remove("hidden");
+}
+
+function showCategoryDetails(node){
+  const panel = $("detailsPanel");
+  const title = $("detailsTitle");
+  const tags = $("detailsTags");
+  const preview = $("detailsPreview");
+  const link = $("detailsLink");
+
+  title.textContent = `Category: ${node.label}`;
+  tags.innerHTML = "";
+
+  // Find all pages in this category
+  const categoryPages = graphData.nodes.filter(n =>
+    n.type === "page" && n.tags && n.tags.includes(node.label.toLowerCase())
+  );
+
+  if(categoryPages.length > 0){
+    preview.innerHTML = `<strong>${categoryPages.length} page${categoryPages.length > 1 ? "s" : ""}:</strong><br><br>` +
+      categoryPages.map(p => `• ${p.label}`).join("<br>");
+  } else {
+    preview.textContent = "No pages in this category.";
+  }
+
+  link.href = "#";
+  link.onclick = (e) => {
+    e.preventDefault();
+    resetView();
+  };
+  link.textContent = "Reset View";
 
   panel.classList.remove("hidden");
 }
@@ -335,7 +614,6 @@ function hideDetails(){
 }
 
 function navigateToPage(pageId){
-  // Set active page in localStorage and navigate
   localStorage.setItem("ultrase7en_notion_active_v2", pageId);
   window.location.href = "/notion.html";
 }
@@ -346,37 +624,38 @@ function handleSearch(query){
   const q = query.trim().toLowerCase();
 
   if(!q){
-    // Reset all nodes to visible
-    graph.nodeOpacity(0.92);
-    graph.linkOpacity(0.4);
+    clearHighlight();
     return;
   }
 
-  graph.nodeOpacity(node => {
+  highlightNodes.clear();
+  highlightLinks.clear();
+
+  graphData.nodes.forEach(node => {
     const label = (node.label || "").toLowerCase();
     const tags = (node.tags || []).join(" ").toLowerCase();
-    const matches = label.includes(q) || tags.includes(q);
-    return matches ? 1 : 0.1;
+    if(label.includes(q) || tags.includes(q)){
+      highlightNodes.add(node);
+    }
   });
 
-  graph.linkOpacity(0.15);
+  updateHighlight();
 }
 
 /* --------------- Wiring --------------- */
 
 function wire(){
   $("themeBtn").addEventListener("click", cycleTheme);
-  $("resetBtn").addEventListener("click", () => {
-    resetView();
+  $("resetBtn").addEventListener("click", resetView);
+  $("detailsClose").addEventListener("click", () => {
     hideDetails();
+    clearHighlight();
   });
-  $("detailsClose").addEventListener("click", hideDetails);
 
   $("graphSearch").addEventListener("input", (e) => {
     handleSearch(e.target.value);
   });
 
-  // Handle resize
   window.addEventListener("resize", () => {
     if(!graph) return;
     const container = $("graphContainer");
@@ -384,10 +663,10 @@ function wire(){
     graph.height(container.clientHeight);
   });
 
-  // ESC to close details
   window.addEventListener("keydown", (e) => {
     if(e.key === "Escape"){
       hideDetails();
+      clearHighlight();
     }
   });
 }

@@ -352,16 +352,16 @@ body{
   height: 12px;
   border-radius: 50%;
 }
-.legend-dot.hub{
+.legend-dot.category{
+  width: 16px;
+  height: 16px;
   background: var(--node-hub);
-  box-shadow: 0 0 12px var(--node-hub);
-}
-.legend-dot.tag{
-  background: var(--node-tag);
-  box-shadow: 0 0 8px var(--node-tag);
+  box-shadow: 0 0 12px var(--node-hub), 0 0 24px color-mix(in srgb, var(--node-hub) 50%, transparent);
+  border: 2px solid var(--node-tag);
 }
 .legend-dot.page{
   background: var(--node-page);
+  box-shadow: 0 0 4px rgba(255,255,255,0.3);
 }
 
 /* Stats */
