@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(dir /b \"C:\\\\Users\\\\aatir\\\\Documents\\\\Elysium Ventures LLC\\\\UltraSe7en\")",
+      "Bash(findstr:*)"
+    ]
+  }
+}

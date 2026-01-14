@@ -54,6 +54,13 @@
             <button class="segbtn active" id="modeFlowBtn" role="tab" aria-selected="true">Notes</button>
           </div>
 
+          <button class="ghostbtn graph-btn" id="graphBtn" title="Open Knowledge Graph">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="6" cy="18" r="3"/>
+              <path d="M8.5 8.5L15.5 15.5M15.5 8.5L8.5 15.5"/>
+            </svg>
+            Graph
+          </button>
           <button class="ghostbtn" id="themeBtn" title="Toggle theme">Theme</button>
           <button class="ghostbtn" id="exportBtn" title="Export page as .txt">Export</button>
         </div>
@@ -69,6 +76,29 @@
             spellcheck="false"
             autocomplete="off"
           />
+
+          <!-- Page meta: Tags + Graph toggle -->
+          <div class="page-meta">
+            <div class="tags-section">
+              <div class="tags-container" id="tagsContainer"></div>
+              <input
+                id="tagInput"
+                class="tag-input"
+                type="text"
+                placeholder="Add tag..."
+                autocomplete="off"
+              />
+            </div>
+            <button class="add-to-graph-btn" id="addToGraphBtn" title="Toggle graph inclusion">
+              <svg class="graph-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <circle cx="4" cy="4" r="2"/><circle cx="20" cy="4" r="2"/>
+                <circle cx="4" cy="20" r="2"/><circle cx="20" cy="20" r="2"/>
+                <path d="M6 6L9.5 9.5M14.5 9.5L18 6M6 18L9.5 14.5M14.5 14.5L18 18"/>
+              </svg>
+              <span id="graphBtnText">Add to Graph</span>
+            </button>
+          </div>
 
           <!-- Single editor -->
           <div id="flowEditor"

@@ -166,23 +166,116 @@ function renderEditor(){
   // canvas
   renderCanvasBlocks(p?.canvasBlocks || []);
 
+  // tags
+  renderTags(p?.tags || []);
+
+  // graph button state
+  updateGraphButton(p?.inGraph || false);
+
   updateCounts();
   setSaved("Saved");
 }
 
+/* --------------- Tags --------------- */
+
+function renderTags(tags){
+  const container = $("tagsContainer");
+  container.innerHTML = "";
+
+  for(const tag of tags){
+    const el = document.createElement("span");
+    el.className = "tag";
+    el.innerHTML = `
+      ${escapeHTML(tag)}
+      <button class="tag__remove" title="Remove tag">&times;</button>
+    `;
+    el.querySelector(".tag__remove").addEventListener("click", () => removeTag(tag));
+    container.appendChild(el);
+  }
+}
+
+function addTag(tagText){
+  const p = activePage();
+  if(!p) return;
+
+  const normalized = tagText.trim().toLowerCase();
+  if(!normalized) return;
+
+  if(!p.tags) p.tags = [];
+  if(p.tags.includes(normalized)) return; // no duplicates
+
+  p.tags.push(normalized);
+  p.updatedAt = Date.now();
+  persist();
+  renderTags(p.tags);
+  setSaved("Saved");
+}
+
+function removeTag(tag){
+  const p = activePage();
+  if(!p || !p.tags) return;
+
+  p.tags = p.tags.filter(t => t !== tag);
+  p.updatedAt = Date.now();
+  persist();
+  renderTags(p.tags);
+  setSaved("Saved");
+}
+
+/* --------------- Graph inclusion --------------- */
+
+function updateGraphButton(inGraph){
+  const btn = $("addToGraphBtn");
+  const text = $("graphBtnText");
+
+  if(inGraph){
+    btn.classList.add("in-graph");
+    text.textContent = "In Graph";
+  }else{
+    btn.classList.remove("in-graph");
+    text.textContent = "Add to Graph";
+  }
+}
+
+function toggleGraphInclusion(){
+  const p = activePage();
+  if(!p) return;
+
+  p.inGraph = !p.inGraph;
+  p.updatedAt = Date.now();
+  persist();
+  updateGraphButton(p.inGraph);
+  setSaved("Saved");
+}
+
+function openGraph(){
+  // Navigate to the 3D graph page
+  window.location.href = "/notion-graph.html";
+}
+
 function syncModeUI(){
   const isFlow = state.mode === "flow";
-  $("modeFlowBtn").classList.toggle("active", isFlow);
-  $("modeCanvasBtn").classList.toggle("active", !isFlow);
-  $("modeFlowBtn").setAttribute("aria-selected", String(isFlow));
-  $("modeCanvasBtn").setAttribute("aria-selected", String(!isFlow));
+  $("modeFlowBtn")?.classList.toggle("active", isFlow);
+  $("modeFlowBtn")?.setAttribute("aria-selected", String(isFlow));
 
-  $("flowEditor").classList.toggle("hidden", !isFlow);
-  $("canvasEditor").classList.toggle("hidden", isFlow);
+  // Canvas mode elements (optional)
+  const canvasBtn = $("modeCanvasBtn");
+  const canvasEditor = $("canvasEditor");
+  const addBlockBtn = $("addBlockBtn");
 
-  $("addBlockBtn").style.display = isFlow ? "none" : "inline-flex";
-  state.canvasArmed = false;
-  $("addBlockBtn").textContent = "+ Block";
+  if(canvasBtn){
+    canvasBtn.classList.toggle("active", !isFlow);
+    canvasBtn.setAttribute("aria-selected", String(!isFlow));
+  }
+
+  $("flowEditor")?.classList.toggle("hidden", !isFlow);
+  canvasEditor?.classList.toggle("hidden", isFlow);
+
+  if(addBlockBtn){
+    addBlockBtn.style.display = isFlow ? "none" : "inline-flex";
+    state.canvasArmed = false;
+    addBlockBtn.textContent = "+ Block";
+  }
 }
 
 function setSaved(text){
@@ -423,6 +516,8 @@ function insertHTML(html){
 
 function renderCanvasBlocks(blocks){
   const canvas = $("canvasEditor");
+  if(!canvas) return; // Canvas mode not available
+
   // Remove existing blocks
   canvas.querySelectorAll(".block").forEach(b => b.remove());
 
@@ -431,7 +526,8 @@ function renderCanvasBlocks(blocks){
     canvas.appendChild(el);
   }
 
-  $("canvasHint").style.display = blocks.length ? "none" : "inline-flex";
+  const hint = $("canvasHint");
+  if(hint) hint.style.display = blocks.length ? "none" : "inline-flex";
 }
 
 function makeBlockElement(block){
@@ -532,7 +628,8 @@ function onDragEnd(){
 
 function armPlaceBlock(){
   state.canvasArmed = true;
-  $("addBlockBtn").textContent = "Click to place…";
+  const btn = $("addBlockBtn");
+  if(btn) btn.textContent = "Click to place…";
 }
 
 function placeBlockAt(x, y){
@@ -610,11 +707,25 @@ function wire(){
   $("themeBtn").addEventListener("click", cycleTheme);
   $("exportBtn").addEventListener("click", exportActive);
 
-  // mode buttons
-  $("modeFlowBtn").addEventListener("click", () => { state.mode = "flow"; syncModeUI(); updateCounts(); });
-  $("modeCanvasBtn").addEventListener("click", () => { state.mode = "canvas"; syncModeUI(); updateCounts(); });
+  // Graph buttons
+  $("graphBtn").addEventListener("click", openGraph);
+  $("addToGraphBtn").addEventListener("click", toggleGraphInclusion);
 
-  $("addBlockBtn").addEventListener("click", () => {
+  // Tag input
+  $("tagInput").addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){
+      e.preventDefault();
+      const input = $("tagInput");
+      addTag(input.value);
+      input.value = "";
+    }
+  });
+
+  // mode buttons
+  $("modeFlowBtn")?.addEventListener("click", () => { state.mode = "flow"; syncModeUI(); updateCounts(); });
+  $("modeCanvasBtn")?.addEventListener("click", () => { state.mode = "canvas"; syncModeUI(); updateCounts(); });
+
+  $("addBlockBtn")?.addEventListener("click", () => {
     if(state.mode !== "canvas") return;
     armPlaceBlock();
   });
@@ -665,8 +776,8 @@ function wire(){
     });
   });
 
-  // canvas click to place block
-  $("canvasEditor").addEventListener("click", (e) => {
+  // canvas click to place block (optional canvas mode)
+  $("canvasEditor")?.addEventListener("click", (e) => {
     if(state.mode !== "canvas") return;
     if(!state.canvasArmed) return;
 
@@ -682,7 +793,8 @@ function wire(){
     placeBlockAt(Math.max(0, x - 40), Math.max(0, y - 12));
 
     state.canvasArmed = false;
-    $("addBlockBtn").textContent = "+ Block";
+    const addBlockBtn = $("addBlockBtn");
+    if(addBlockBtn) addBlockBtn.textContent = "+ Block";
   });
 
   // dragging blocks (global mouse listeners)
