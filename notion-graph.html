@@ -3,77 +3,107 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>UltraSe7en — Knowledge Graph</title>
+  <title>UltraSe7en — Graph</title>
   <link rel="stylesheet" href="/notion-graph.css" />
-  <!-- Three.js -->
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-  <!-- 3D Force Graph -->
   <script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
 </head>
 
-<body>
+<body data-theme="dark">
   <div class="graph-app">
-    <!-- Header -->
-    <header class="graph-header">
-      <div class="header-left">
-        <a class="back-btn" href="/notion.html" title="Back to Notes">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-          Notes
-        </a>
-        <div class="graph-title">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="6" cy="18" r="3"/>
-            <path d="M8.5 8.5L15.5 15.5M15.5 8.5L8.5 15.5"/>
-          </svg>
-          Knowledge Graph
+
+    <!-- Obsidian-style Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">FILTERS</span>
+        <button class="sidebar-close" id="sidebarToggle">×</button>
+      </div>
+
+      <div class="sidebar-section">
+        <input type="text" class="filter-search" id="graphSearch" placeholder="Search..." />
+      </div>
+
+      <div class="sidebar-section">
+        <label class="filter-toggle">
+          <span>Categories</span>
+          <input type="checkbox" id="showCategories" checked />
+          <span class="toggle-switch"></span>
+        </label>
+        <label class="filter-toggle">
+          <span>Orphans</span>
+          <input type="checkbox" id="showOrphans" checked />
+          <span class="toggle-switch"></span>
+        </label>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <span class="section-label">DISPLAY</span>
+
+        <div class="slider-group">
+          <span class="slider-label">Node size</span>
+          <input type="range" id="nodeSize" min="1" max="10" value="4" />
+        </div>
+
+        <div class="slider-group">
+          <span class="slider-label">Link opacity</span>
+          <input type="range" id="linkOpacity" min="1" max="10" value="3" />
+        </div>
+
+        <div class="slider-group">
+          <span class="slider-label">Spread</span>
+          <input type="range" id="spreadForce" min="1" max="10" value="5" />
         </div>
       </div>
 
-      <div class="header-right">
-        <div class="search-box">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-          </svg>
-          <input type="text" id="graphSearch" placeholder="Search nodes..." autocomplete="off" />
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-section">
+        <span class="section-label">ACTIONS</span>
+        <button class="action-btn" id="fitBtn">Fit to view</button>
+        <button class="action-btn" id="resetBtn">Reset</button>
+      </div>
+    </aside>
+
+    <!-- Main Graph Area -->
+    <main class="graph-main">
+      <!-- Minimal Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <a class="back-link" href="/notion.html">← Notes</a>
+          <button class="icon-btn" id="sidebarOpen" title="Filters">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
+            </svg>
+          </button>
         </div>
-        <button class="ctrl-btn" id="fitBtn" title="Fit all nodes">Fit</button>
-        <button class="ctrl-btn" id="resetBtn" title="Reset view">Reset</button>
-        <button class="ctrl-btn" id="themeBtn" title="Toggle theme">Theme</button>
-      </div>
-    </header>
+        <div class="topbar-center">
+          <span class="graph-title">Graph view</span>
+        </div>
+        <div class="topbar-right">
+          <span class="stats"><span id="nodeCount">0</span> nodes</span>
+        </div>
+      </header>
 
-    <!-- 3D Graph Container -->
-    <div id="graphContainer" class="graph-container"></div>
+      <!-- Graph Container -->
+      <div id="graphContainer" class="graph-container"></div>
 
-    <!-- Node Details Panel -->
-    <div class="details-panel hidden" id="detailsPanel">
-      <div class="details-header">
-        <div class="details-title" id="detailsTitle">Page Title</div>
-        <button class="details-close" id="detailsClose">&times;</button>
-      </div>
-      <div class="details-tags" id="detailsTags"></div>
-      <div class="details-preview" id="detailsPreview"></div>
-      <a class="details-link" id="detailsLink" href="#">Open Page</a>
-    </div>
+      <!-- Hover Tooltip -->
+      <div id="nodeTooltip" class="node-tooltip"></div>
 
-    <!-- Legend -->
-    <div class="legend">
-      <div class="legend-item">
-        <span class="legend-dot category"></span>
-        Category
+      <!-- Details Panel (right side, on click) -->
+      <div class="details-panel hidden" id="detailsPanel">
+        <div class="details-header">
+          <span class="details-title" id="detailsTitle">Title</span>
+          <button class="details-close" id="detailsClose">×</button>
+        </div>
+        <div class="details-tags" id="detailsTags"></div>
+        <div class="details-preview" id="detailsPreview"></div>
+        <button class="details-link" id="detailsLink">Open</button>
       </div>
-      <div class="legend-item">
-        <span class="legend-dot page"></span>
-        Page
-      </div>
-    </div>
+    </main>
 
-    <!-- Stats -->
-    <div class="stats" id="stats">
-      <span id="nodeCount">0</span> nodes &middot; <span id="linkCount">0</span> links
-    </div>
   </div>
 
   <script src="/notion-graph.js"></script>
