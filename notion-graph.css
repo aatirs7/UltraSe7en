@@ -186,18 +186,23 @@ body{
 }
 
 .ctrl-btn{
-  padding: 8px 14px;
-  border-radius: 10px;
+  padding: 8px 16px;
+  border-radius: 8px;
   border: 1px solid var(--subtle);
   background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 .ctrl-btn:hover{
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--subtle));
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--subtle));
+  color: var(--text);
+}
+.ctrl-btn:active{
+  transform: scale(0.97);
 }
 
 /* Graph Container */
@@ -332,13 +337,19 @@ body{
 
 .details-tag{
   display: inline-flex;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  color: color-mix(in srgb, var(--accent) 90%, var(--text));
-  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  color: color-mix(in srgb, var(--accent) 95%, var(--text));
+  font-size: 12px;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.details-tag:hover{
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .details-preview{
